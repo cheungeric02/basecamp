@@ -242,6 +242,13 @@
   .cat-head .chev { display: inline-flex; transition: transform .15s; color: var(--muted); }
   .cat-head .chev svg { width: 15px; height: 15px; }
   .cat-head.collapsed .chev { transform: rotate(-90deg); }
+  .pack-sec-head { display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none;
+    background: var(--surface); border-radius: 24px; padding: 16px 20px; box-shadow: var(--md-e1); margin: 18px 0 12px; }
+  .pack-sec-head:first-of-type { margin-top: 4px; }
+  .pack-sec-head h3 { font-size: 1.12rem; }
+  .pack-sec-head .chev { display: inline-flex; color: var(--muted); transition: transform .18s ease; }
+  .pack-sec-head .chev svg { width: 20px; height: 20px; }
+  .pack-sec-head.collapsed .chev { transform: rotate(-90deg); }
 
   .day-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
   .day-head h4 { font-family: var(--font-display); font-size: 1.15rem; }
@@ -838,7 +845,7 @@
   function sectionFab() {
     const t = activeTrip();
     if (t && t.lockHash && !isTripUnlocked(t)) return "";
-    const map = { meals: "add-meal", shopping: "add-shop", roles: "add-role", schedule: "add-sched", budget: "add-expense" };
+    const map = { meals: "add-meal", shopping: "add-shop", roles: "add-role", schedule: "add-sched", budget: "add-expense", packing: "add-pack-choose" };
     const action = map[ui.section];
     if (!action) return "";
     return '<button class="md-fab" data-action="'+action+'" title="Add" aria-label="Add">'+I.plus+'</button>';
@@ -1304,30 +1311,55 @@
     const pct = total ? Math.round(done/total*100) : 0;
     return '<div class="card card-pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><span class="label">'+esc(label)+'</span><span class="num" style="font-weight:600">'+done+' / '+total+'</span></div><div class="progress"><span style="width:'+pct+'%"></span></div></div>';
   }
+  function packSecHead(key, title, sub, collapsed) {
+    return '<div class="pack-sec-head'+(collapsed?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'">' +
+      '<span class="chev">'+I.chevron+'</span>' +
+      '<div style="flex:1;min-width:0"><h3>'+title+'</h3><div class="label" style="margin-top:2px">'+esc(sub)+'</div></div></div>';
+  }
+  function openAddPackingChooser() {
+    const overlay = document.getElementById("overlay");
+    overlay.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="max-width:400px">' +
+      '<div class="modal-head"><h3>Add packing item</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
+      '<div class="modal-body"><p class="row-sub" style="margin:-4px 0 4px">Which list should it go on?</p>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<button type="button" class="btn primary" data-action="add-mypack" style="justify-content:center;padding:14px 18px">'+I.packing+' My personal list</button>' +
+        '<button type="button" class="btn" data-action="add-pack" style="justify-content:center;padding:14px 18px">'+I.roles+' Group (shared) list</button>' +
+      '</div></div></div>';
+    overlay.classList.add("open");
+  }
   function secPacking(trip) {
     let html = pageHead("Packing", "Your personal bag, plus the shared group gear.", "");
     const who = whoAmI();
 
-    // ----- Personal list (per logged-in person) -----
-    html += '<div class="section-title" style="margin-top:2px"><div><h3>Your personal list'+(who?' · '+esc(who):"")+'</h3><div class="label">Only you see &amp; edit this — clothing, toiletries, etc.</div></div>'+(who?'<button class="btn primary" data-action="add-mypack">'+I.plus+' Add</button>':"")+'</div>';
-    if (!who) {
-      html += '<div class="card card-pad empty">'+I.packing+'<p>Pick who you are to use your own personal packing list.</p><button class="btn primary" data-action="change-who" style="margin:0 auto">Choose your name</button></div>';
-    } else {
-      const mine = myPersonalList(trip);
-      if (!mine.length) {
-        html += '<div class="card card-pad empty">'+I.packing+'<p>Your personal list is empty.</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn primary" data-action="seed-mypack">Use a starter list</button><button class="btn" data-action="add-mypack">Add an item</button></div></div>';
+    // ----- Personal (big collapsible) -----
+    const pKey = "PACK:personal", pCollapsed = !!collapsedCats[pKey];
+    html += packSecHead(pKey, "Your personal list"+(who?" · "+esc(who):""), "Only you see & edit this", pCollapsed);
+    if (!pCollapsed) {
+      if (!who) {
+        html += '<div class="card card-pad empty">'+I.packing+'<p>Pick who you are to use your own personal packing list.</p><button class="btn primary" data-action="change-who" style="margin:0 auto">Choose your name</button></div>';
       } else {
-        html += progressCard("Your progress", mine.filter(x=>x.packed).length, mine.length);
-        html += packingCategoryBlocks(mine, "toggle-mypack", "edit-mypack", "del-mypack", trip, false, "personal", null);
+        const mine = myPersonalList(trip);
+        if (!mine.length) {
+          html += '<div class="card card-pad empty">'+I.packing+'<p>Your personal list is empty.</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn primary" data-action="seed-mypack">Use a starter list</button><button class="btn" data-action="add-mypack">Add an item</button></div></div>';
+        } else {
+          html += progressCard("Your progress", mine.filter(x=>x.packed).length, mine.length);
+          html += packingCategoryBlocks(mine, "toggle-mypack", "edit-mypack", "del-mypack", trip, false, "personal", null);
+        }
       }
     }
 
-    // ----- Shared/group list (everyone contributes) -----
-    html += '<div class="section-title" style="margin-top:28px"><div><h3>Group packing (shared)</h3><div class="label">Everyone contributes — assign who brings each thing.</div></div><button class="btn" data-action="add-pack">'+I.plus+' Add</button></div>';
-    if (!trip.packing.length) return html + emptyState(I.packing, "No shared gear yet.", "add-pack", "Add item");
-    html += progressCard("Group progress", trip.packing.filter(x=>x.packed).length, trip.packing.length);
-    html += filterBar(trip, "packing", filterPacking);
-    html += packingCategoryBlocks(trip.packing, "toggle-pack", "edit-pack", "del-pack", trip, true, "group", filterPacking);
+    // ----- Group (big collapsible) -----
+    const gKey = "PACK:group", gCollapsed = !!collapsedCats[gKey];
+    html += packSecHead(gKey, "Group packing (shared)", "Everyone contributes — assign who brings each thing", gCollapsed);
+    if (!gCollapsed) {
+      if (!trip.packing.length) {
+        html += emptyState(I.packing, "No shared gear yet.", "add-pack", "Add item");
+      } else {
+        html += progressCard("Group progress", trip.packing.filter(x=>x.packed).length, trip.packing.length);
+        html += filterBar(trip, "packing", filterPacking);
+        html += packingCategoryBlocks(trip.packing, "toggle-pack", "edit-pack", "del-pack", trip, true, "group", filterPacking);
+      }
+    }
     return html;
   }
   function packFields() {
@@ -1614,6 +1646,7 @@
     "del-mypack": (el) => { const t = activeTrip(); const who = whoAmI(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); confirmDialog("Remove item", "Remove “"+(p?p.item:"item")+"” from your personal list?", () => { t.personalPacking[who] = list.filter(x=>x.id!==el.dataset.id); save(); render(); toast("Removed"); }); },
     "toggle-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (p) { p.packed = el.checked; save(); render(); } },
     "seed-mypack": () => { const t = activeTrip(); if (!whoAmI()) { ensureIdentity(true); return; } const list = myPersonalList(t); personalStarter().forEach(it => list.push(it)); save(); logActivity("started a personal packing list"); render(); toast("Starter list added"); },
+    "add-pack-choose": () => openAddPackingChooser(),
 
     // guests / people
     "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
