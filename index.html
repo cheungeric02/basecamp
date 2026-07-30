@@ -33,9 +33,9 @@
     --shadow-lg: 0 8px 40px rgba(30,36,31,.18);
     --radius: 12px;
     --radius-sm: 8px;
-    --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
-    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --font-display: 'Roboto', system-ui, -apple-system, sans-serif;
+    --font-body: 'Roboto', system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: 'Roboto', ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -359,61 +359,90 @@
     .field.row2 { grid-template-columns: 1fr; }
   }
 
-  /* ============ Material 3 preview scope (Overview + Meals) ============ */
-  .content.md {
-    font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+  /* ============ Material 3 Expressive (global) ============ */
+  :root {
     --md-e1: 0 1px 2px rgba(0,0,0,.26), 0 1px 3px 1px rgba(0,0,0,.10);
     --md-e2: 0 1px 2px rgba(0,0,0,.26), 0 2px 8px 2px rgba(0,0,0,.12);
     --md-e3: 0 4px 10px 3px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.26);
   }
-  .content.md h2, .content.md h3, .content.md h4 { font-family: 'Roboto', system-ui, sans-serif; letter-spacing: 0; }
-  .content.md .page-head h2 { font-weight: 400; }
-  .content.md h3, .content.md h4, .content.md .day-head h4 { font-weight: 500; }
-  /* Expressive: big rounded surfaces */
-  .content.md .card { border: none; border-radius: 28px; box-shadow: var(--md-e1); }
-  .content.md .card-pad { padding: 22px 24px; }
-  .content.md .stat { border-radius: 28px; padding: 20px 22px; }
-  .content.md .day-head { margin: 24px 0 12px; }
+  h2, h3, h4 { letter-spacing: 0; }
+  .page-head h2 { font-weight: 500; }
 
-  /* Expressive: fully-rounded (pill) buttons with springy press */
-  .content.md .btn { border-radius: 999px; padding: 10px 22px; font-weight: 600; text-transform: none;
-    border: 1px solid var(--border-strong); background: var(--surface); transition: box-shadow .15s ease, background .15s ease, transform .1s ease; }
-  .content.md .btn:hover { background: var(--surface-2); box-shadow: var(--md-e1); }
-  .content.md .btn:active { transform: scale(.96); }
-  .content.md .btn.sm { padding: 8px 16px; border-radius: 999px; }
-  .content.md .btn.primary { background: var(--accent); border-color: transparent; box-shadow: var(--md-e1); }
-  .content.md .btn.primary:hover { box-shadow: var(--md-e2); }
+  /* Dial 3: bigger radii + more whitespace */
+  .card { border: none; border-radius: 30px; box-shadow: var(--md-e1); }
+  .card-pad { padding: 22px 24px; }
+  .stat { border-radius: 30px; padding: 20px 22px; }
+  .grid { gap: 18px; }
+  .section-block { margin-bottom: 28px; }
+  .day-head { margin: 26px 0 12px; }
 
-  .content.md .pill { border-radius: 999px; padding: 5px 14px; font-family: 'Roboto', sans-serif; font-weight: 600; }
-  .content.md .cd-num { font-family: 'Roboto', sans-serif; font-weight: 700; }
+  /* Pill buttons w/ springy press */
+  .btn { border-radius: 999px; padding: 10px 20px; font-weight: 600; text-transform: none;
+    transition: box-shadow .15s ease, background .15s ease, transform .1s ease; }
+  .btn:active { transform: scale(.96); }
+  .btn.sm { padding: 8px 15px; border-radius: 999px; }
+  .btn.primary { box-shadow: var(--md-e1); }
+  .btn.primary:hover { box-shadow: var(--md-e2); }
+  .pill { border-radius: 999px; padding: 5px 14px; font-weight: 600; }
+  .cd-num { font-weight: 700; }
 
-  /* Expressive: round, tonal dropdown menus */
-  .content.md .inline-select { border-radius: 999px; padding: 9px 32px 9px 16px; background-color: var(--accent-soft);
-    color: var(--accent-ink); border-color: transparent; font-weight: 600; max-width: 160px; }
+  /* Round tonal dropdowns + rounder inputs */
+  .inline-select { border-radius: 999px; padding: 9px 32px 9px 16px; background-color: var(--accent-soft);
+    color: var(--accent-ink); border-color: transparent; font-weight: 600; max-width: 170px; }
+  .trip-switch select { border-radius: 999px; }
+  .field input, .field select, .field textarea { border-radius: 16px; }
 
-  /* Expressive: circular, contrasting action icons (edit = tonal green, delete = tonal red) */
-  .content.md .row-actions { opacity: 1; gap: 8px; }
-  .content.md .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2);
+  /* Circular contrasting action icons (edit = green, delete = red) */
+  .row-actions { opacity: 1; gap: 8px; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2);
     transition: transform .1s ease, filter .12s ease; }
-  .content.md .icon-btn:active { transform: scale(.9); }
-  .content.md .icon-btn[data-action^="edit"] { background: var(--accent-soft); color: var(--accent-ink); }
-  .content.md .icon-btn[data-action^="del"] { background: var(--danger-soft); color: var(--danger); }
-  .content.md .icon-btn:hover { filter: brightness(.97); }
+  .icon-btn:active { transform: scale(.9); }
+  .icon-btn[data-action^="edit"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .icon-btn[data-action^="del"] { background: var(--danger-soft); color: var(--danger); }
+  .icon-btn:hover { filter: brightness(.97); }
 
-  .content.md .page-head .btn.primary { display: none; }  /* replaced by the FAB */
+  /* Dial 2: tonal color containers */
+  .stat.tone-ember { background: var(--ember-soft); }
+  .stat.tone-accent { background: var(--accent-soft); }
+  .stat.tone-info { background: var(--info-soft); }
 
-  /* Expressive: large, bold FAB */
-  .content.md .md-fab { position: fixed; right: 24px; bottom: 24px; z-index: 40; display: inline-flex; align-items: center;
-    gap: 10px; padding: 18px 26px; border: none; border-radius: 28px; background: var(--accent); color: #fff;
-    font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 1rem; box-shadow: var(--md-e3); cursor: pointer;
-    transition: transform .12s ease, box-shadow .15s ease, filter .12s ease; }
-  .content.md .md-fab svg { width: 22px; height: 22px; }
-  .content.md .md-fab:hover { filter: brightness(1.04); box-shadow: var(--md-e2); transform: translateY(-1px); }
-  .content.md .md-fab:active { transform: scale(.96); }
-  @media (prefers-color-scheme: dark) { .content.md .md-fab { color: #10150F; } }
-  :root[data-theme="dark"] .content.md .md-fab { color: #10150F; }
-  :root[data-theme="light"] .content.md .md-fab { color: #fff; }
-  @media (max-width: 860px) { .content.md .md-fab { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); } }
+  /* Modals: rounder */
+  .modal { border-radius: 28px; }
+
+  /* Dial 1: big round icon-only FAB */
+  .page-head .btn.primary { display: none; }  /* replaced by the FAB */
+  .md-fab { position: fixed; right: 24px; bottom: 24px; z-index: 45; width: 64px; height: 64px; border: none;
+    border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent); color: #fff;
+    box-shadow: var(--md-e3); cursor: pointer; transition: transform .12s ease, box-shadow .15s ease, filter .12s ease; }
+  .md-fab svg { width: 28px; height: 28px; }
+  .md-fab:hover { filter: brightness(1.05); box-shadow: var(--md-e2); transform: translateY(-2px); }
+  .md-fab:active { transform: scale(.92); }
+  @media (prefers-color-scheme: dark) { .md-fab { color: #10150F; } }
+  :root[data-theme="dark"] .md-fab { color: #10150F; }
+  :root[data-theme="light"] .md-fab { color: #fff; }
+
+  /* Nav: expressive pill items + Material active indicator */
+  .nav-item { border-radius: 999px; }
+  .nav-ind { display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Expressive theme segmented toggle */
+  .theme-seg { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
+  .theme-seg .seg { border: none; background: transparent; border-radius: 999px; padding: 6px 12px; font: inherit;
+    font-size: .8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; color: var(--muted);
+    cursor: pointer; transition: background .18s ease, color .18s ease, transform .1s ease; }
+  .theme-seg .seg svg { width: 16px; height: 16px; }
+  .theme-seg .seg:active { transform: scale(.94); }
+  .theme-seg .seg.on { background: var(--accent); box-shadow: var(--md-e1); }
+  @media (prefers-color-scheme: dark) { .theme-seg .seg.on { color: #10150F; } }
+  :root[data-theme="dark"] .theme-seg .seg.on { color: #10150F; }
+  :root[data-theme="light"] .theme-seg .seg.on { color: #fff; }
+
+  @media (max-width: 860px) {
+    .md-fab { bottom: calc(90px + env(safe-area-inset-bottom, 0px)); right: 16px; }
+    .nav-item.active { background: transparent; }
+    .nav-item .nav-ind { padding: 5px 18px; border-radius: 999px; transition: background .18s ease; }
+    .nav-item.active .nav-ind { background: var(--accent-soft); }
+  }
 </style>
 </head>
 <body>
@@ -454,6 +483,8 @@
     upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg>',
     tent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20 12 4l9 16M12 4v16M12 20l-4-6M12 20l4-6"/></svg>',
     theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
     tracker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-12 2 6h6"/></svg>',
@@ -662,6 +693,7 @@
       ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
       if (typeof t.notes !== "string") t.notes = "";
     });
+    if (state.theme !== "light" && state.theme !== "dark") { state.theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; }
     applyTheme();
     render();
     if (isAdmin()) startActivityWatch();
@@ -670,14 +702,7 @@
 
   /* ---------- Theme ---------- */
   function applyTheme() {
-    const t = state.theme || "auto";
-    if (t === "auto") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", t);
-  }
-  function cycleTheme() {
-    const order = ["auto","light","dark"]; const cur = state.theme || "auto";
-    state.theme = order[(order.indexOf(cur)+1) % 3]; saveLocal(); applyTheme();
-    toast("Theme: " + state.theme);
+    document.documentElement.setAttribute("data-theme", state.theme === "dark" ? "dark" : "light");
   }
 
   /* ---------- Toast ---------- */
@@ -798,12 +823,19 @@
     const trip = activeTrip();
     document.title = (trip && trip.name) ? (trip.name + " · Basecamp") : "Basecamp";
     const app = document.getElementById("app");
-    const mdOn = (ui.section === "overview" || ui.section === "meals");
     app.innerHTML =
       '<div class="app">' + renderSidebar(trip) +
-      '<div class="main"><div class="content'+(mdOn ? " md" : "")+'" id="content"></div></div></div>';
+      '<div class="main"><div class="content" id="content"></div>' + sectionFab() + '</div></div>';
     renderSection();
     scrollNavToActive();
+  }
+  function sectionFab() {
+    const t = activeTrip();
+    if (t && t.lockHash && !isTripUnlocked(t)) return "";
+    const map = { meals: "add-meal", shopping: "add-shop", roles: "add-role", schedule: "add-sched", budget: "add-expense" };
+    const action = map[ui.section];
+    if (!action) return "";
+    return '<button class="md-fab" data-action="'+action+'" title="Add" aria-label="Add">'+I.plus+'</button>';
   }
   function scrollNavToActive() {
     if (!(window.matchMedia && window.matchMedia("(max-width: 860px)").matches)) return;
@@ -842,12 +874,15 @@
       '</div>' +
       '<nav class="nav">' + (isAdmin() ? NAV.concat([{ id:"tracker", label:"Tracker", short:"Tracker", icon:I.tracker }]) : NAV).map(n => {
         const badge = c[n.id] ? '<span class="badge num">'+c[n.id]+'</span>' : "";
-        return '<button class="nav-item'+(ui.section===n.id?" active":"")+'" data-action="nav" data-section="'+n.id+'">'+n.icon+'<span class="nav-full">'+n.label+'</span><span class="nav-short">'+(n.short||n.label)+'</span>'+badge+'</button>';
+        return '<button class="nav-item'+(ui.section===n.id?" active":"")+'" data-action="nav" data-section="'+n.id+'"><span class="nav-ind">'+n.icon+'</span><span class="nav-full">'+n.label+'</span><span class="nav-short">'+(n.short||n.label)+'</span>'+badge+'</button>';
       }).join("") + '</nav>' +
       '<div class="sidebar-foot">' +
         '<button class="btn sm" data-action="export" title="Download a backup">'+I.download+' Export</button>' +
         '<button class="btn sm" data-action="import" title="Load a backup">'+I.upload+' Import</button>' +
-        '<button class="btn sm" data-action="theme" title="Toggle theme">'+I.theme+' '+themeLabel+'</button>' +
+        '<div class="theme-seg" role="group" aria-label="Theme">' +
+          '<button class="seg'+(state.theme!=="dark"?" on":"")+'" data-action="set-theme" data-theme="light" title="Light mode" aria-label="Light mode">'+I.sun+'</button>' +
+          '<button class="seg'+(state.theme==="dark"?" on":"")+'" data-action="set-theme" data-theme="dark" title="Dark mode" aria-label="Dark mode">'+I.moon+'</button>' +
+        '</div>' +
         '<button class="btn sm" data-action="admin" title="Admin / activity tracker">'+I.lock+' Admin'+(isAdmin()?" (on)":"")+'</button>' +
         '<div class="label" style="width:100%;margin-top:8px;display:flex;align-items:center;gap:7px;text-transform:none;letter-spacing:.02em">' +
           '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>' +
@@ -937,11 +972,11 @@
     if (nextMeal) {
       const when = (nextMeal.day ? fmtDate(nextMeal.day, "dow") : "") + (nextMeal.type ? " · " + nextMeal.type : "");
       const cook = nextMeal.personId ? ("Cook: " + personName(trip, nextMeal.personId)) : "Cook: TBD";
-      mealTile = '<div class="card stat"><div class="label">Upcoming meal'+(when?" · "+esc(when):"")+'</div>' +
+      mealTile = '<div class="card stat tone-info"><div class="label">Upcoming meal'+(when?" · "+esc(when):"")+'</div>' +
         '<div class="val" style="font-size:1.35rem;line-height:1.25;margin-top:8px">'+esc(nextMeal.name)+'</div>' +
         '<div class="sub">'+esc(cook)+'</div></div>';
     } else {
-      mealTile = '<div class="card stat"><div class="label">Upcoming meal</div>' +
+      mealTile = '<div class="card stat tone-info"><div class="label">Upcoming meal</div>' +
         '<div class="val" style="font-size:1.35rem;margin-top:8px;color:var(--muted)">—</div><div class="sub">No meals planned yet</div></div>';
     }
     // countdown ring
@@ -952,7 +987,7 @@
     else { cdFrac = 1; cdUnit = ""; }
     const CIRC = 2 * Math.PI * 52;
     const cdOff = CIRC * (1 - cdFrac);
-    const countdownTile = '<div class="card stat" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px">' +
+    const countdownTile = '<div class="card stat tone-ember" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px">' +
       '<div class="cd-ring"><svg viewBox="0 0 120 120">' +
         '<circle class="cd-track" cx="60" cy="60" r="52"></circle>' +
         '<circle class="cd-arc" cx="60" cy="60" r="52" style="stroke-dasharray:'+CIRC.toFixed(1)+';stroke-dashoffset:'+cdOff.toFixed(1)+'"></circle>' +
@@ -1005,7 +1040,7 @@
     return html;
   }
   function statTile(label, val, sub, tone, pct) {
-    return '<div class="card stat"><div class="label">'+esc(label)+'</div><div class="val" style="'+(tone==="ember"?"color:var(--ember)":"")+'">'+val+'</div>' +
+    return '<div class="card stat'+(tone?" tone-"+tone:"")+'"><div class="label">'+esc(label)+'</div><div class="val" style="'+(tone==="ember"?"color:var(--ember)":"")+'">'+val+'</div>' +
       (pct!=null?'<div class="progress" style="margin-top:10px"><span style="width:'+pct+'%"></span></div>':'<div class="sub">'+esc(sub)+'</div>') + '</div>';
   }
   function glanceRow(label, val, section) {
@@ -1045,9 +1080,8 @@
   const MEAL_TONE = { "Breakfast":"warn", "Lunch":"info", "Dinner":"green", "Snack":"ember", "Drinks":"info" };
   function secMeals(trip) {
     let html = pageHead("Meals & Menu", "What you're eating, and who's cooking.", addBtn("add-meal","Add meal"));
-    const mealFab = '<button class="md-fab" data-action="add-meal" title="Add meal">'+I.plus+' Add meal</button>';
     const days = tripDays(trip);
-    if (!trip.meals.length) return html + emptyState(I.meals, "No meals planned yet. Build out the menu day by day.", "add-meal", "Add first meal") + mealFab;
+    if (!trip.meals.length) return html + emptyState(I.meals, "No meals planned yet. Build out the menu day by day.", "add-meal", "Add first meal");
     const groups = days.length ? days.slice() : [];
     trip.meals.forEach(m => { if (groups.indexOf(m.day) < 0) groups.push(m.day || ""); });
     groups.forEach(day => {
@@ -1065,7 +1099,7 @@
       });
       html += '</div></div>';
     });
-    return html + mealFab;
+    return html;
   }
   function mealFields(trip) {
     const days = tripDays(trip);
@@ -1477,7 +1511,7 @@
 
   const ACTIONS = {
     nav: (el) => { ui.section = el.dataset.section; render(); const c = document.getElementById("content"); if (c) c.scrollTop = 0; window.scrollTo(0,0); },
-    theme: () => cycleTheme(),
+    "set-theme": (el) => { state.theme = el.dataset.theme === "dark" ? "dark" : "light"; saveLocal(); applyTheme(); render(); },
     "switch-trip": (el) => { const id = el.value; const t = state.trips.find(x => x.id === id); if (t && t.lockHash && !isTripUnlocked(t)) { render(); promptTripPassword(t); return; } state.activeId = id; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); },
     "unlock-current": () => { const t = activeTrip(); if (t) promptTripPassword(t); },
     "new-trip": () => newTrip(),
