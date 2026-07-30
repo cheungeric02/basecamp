@@ -295,6 +295,13 @@
     background: var(--surface-2); color: var(--ink); font-size: .82rem; }
   .chip-toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
+  .idpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 10px; }
+  .idpick { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer; color: var(--ink); }
+  .idpick:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .idpick-av { width: 46px; height: 46px; font-size: 1rem; }
+  .idpick-av.sel { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .idpick-name { font-size: .82rem; font-weight: 500; text-align: center; line-height: 1.15; }
+
   /* toast */
   .toast-wrap { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 200;
     display: flex; flex-direction: column; gap: 8px; align-items: center; }
@@ -745,6 +752,7 @@
   }
 
   function counts(trip) {
+    if (trip && trip.lockHash && !isTripUnlocked(trip)) return {};
     return {
       weather: (trip.weather||[]).length,
       meals: trip.meals.length,
@@ -765,7 +773,7 @@
     return '<aside class="sidebar">' +
       '<div class="trip-switch">' +
         '<select data-action="switch-trip" aria-label="Active trip">' +
-          state.trips.map(t => '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(t.name)+'</option>').join("") +
+          state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 Locked trip" : t.name)+'</option>'; }).join("") +
         '</select>' +
         '<div class="row">' +
           '<button class="btn sm" data-action="new-trip" style="flex:1">'+I.plus+' New trip</button>' +
@@ -818,6 +826,7 @@
     if (ui.section === "tracker" && !isAdmin()) ui.section = "overview";
     const trip = activeTrip();
     const el = document.getElementById("content");
+    if (trip && trip.lockHash && !isTripUnlocked(trip)) { el.innerHTML = lockScreen(trip); return; }
     const map = { overview: secOverview, weather: secWeather, meals: secMeals, shopping: secShopping,
       roles: secRoles, schedule: secSchedule, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker };
     el.innerHTML = (map[ui.section] || secOverview)(trip);
@@ -1407,16 +1416,19 @@
   const ACTIONS = {
     nav: (el) => { ui.section = el.dataset.section; render(); const c = document.getElementById("content"); if (c) c.scrollTop = 0; window.scrollTo(0,0); },
     theme: () => cycleTheme(),
-    "switch-trip": (el) => { state.activeId = el.value; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); },
+    "switch-trip": (el) => { const id = el.value; const t = state.trips.find(x => x.id === id); if (t && t.lockHash && !isTripUnlocked(t)) { render(); promptTripPassword(t); return; } state.activeId = id; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); },
+    "unlock-current": () => { const t = activeTrip(); if (t) promptTripPassword(t); },
     "new-trip": () => newTrip(),
     "edit-trip": () => editTrip(),
     export: () => doExport(),
     import: () => doImport(),
     admin: () => openAdminGate(),
     "change-who": () => ensureIdentity(true),
+    "pick-who": (el) => applyIdentity(el.dataset.name),
+    "pick-who-other": () => { const inp = document.getElementById("idOther"); applyIdentity(inp ? inp.value.trim() : ""); },
     "refresh-wx": () => loadLiveWeather(true),
     "lock-admin": () => { setAdmin(false); ui.section = "overview"; render(); toast("Admin locked on this device"); },
-    "clear-log": () => { confirmDialog("Clear activity log", "Permanently delete the entire activity history for everyone? This can't be undone.", () => { if (window.BCsync && window.BCsync.clearActivity) window.BCsync.clearActivity(); activityCache = []; render(); toast("Log cleared"); }, "Clear log"); },
+    "clear-log": () => { const trip = activeTrip(); const keys = tripActivity(trip).map(a => a._key).filter(Boolean); if (!keys.length) { toast("Nothing to clear for this trip"); return; } confirmDialog("Clear this trip's log", "Delete the activity history for “"+trip.name+"”? This can't be undone.", () => { if (window.BCsync && window.BCsync.removeActivityKeys) window.BCsync.removeActivityKeys(keys); activityCache = activityCache.filter(a => keys.indexOf(a._key) < 0); render(); toast("Log cleared"); }, "Clear log"); },
 
     // weather
     "edit-weather": (el) => editWeather(el.dataset.id),
@@ -1613,20 +1625,30 @@
     if (identityPrompted && !force) return;
     identityPrompted = true;
     const people = (activeTrip().people || []);
-    openForm({ title: "Who are you?", submitLabel: "That's me",
-      fields: [ { key:"name", label:"Pick your name so your edits are labelled", type: people.length ? "select" : "text",
-        options: people.length ? people.map(p => p.name) : undefined, placeholder:"Your name" } ],
-      values: { name: whoAmI() || (people[0] ? people[0].name : "") },
-      onSubmit: v => { if (v.name) { const first = !whoAmI(); setWho(v.name); render(); if (first) logActivity("joined the trip"); toast("Hi " + v.name + "!"); } }
-    });
+    const cur = whoAmI();
+    const overlay = document.getElementById("overlay");
+    const circles = people.map(p => '<button type="button" class="idpick" data-action="pick-who" data-name="'+esc(p.name)+'">' +
+      '<span class="avatar idpick-av'+(cur === p.name ? " sel" : "")+'">'+initials(p.name)+'</span>' +
+      '<span class="idpick-name">'+esc(p.name)+'</span></button>').join("");
+    overlay.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="max-width:440px">' +
+      '<div class="modal-head"><h3>Who are you?</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
+      '<div class="modal-body"><p class="row-sub" style="margin:-4px 0 2px">Tap your name so your edits are labelled.</p>' +
+      (circles ? '<div class="idpick-grid">'+circles+'</div>' : "") +
+      '<div class="field" style="margin-top:'+(circles ? "8px" : "0")+'"><label>'+(circles ? "Not listed? Enter your name" : "Enter your name")+'</label>' +
+      '<div style="display:flex;gap:8px"><input type="text" id="idOther" placeholder="Your name" value="'+esc(cur||"")+'"><button type="button" class="btn" data-action="pick-who-other">Set</button></div></div>' +
+      '</div></div>';
+    overlay.classList.add("open");
+    const inp = overlay.querySelector("#idOther");
+    if (inp) inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); ACTIONS["pick-who-other"](); } });
   }
+  function applyIdentity(n) { if (!n) { toast("Type your name first"); return; } const first = !whoAmI(); setWho(n); closeModal(); render(); if (first) logActivity("joined the trip"); toast("Hi " + n + "!"); }
 
   /* ================= ACTIVITY LOG ================= */
   function logActivity(text) {
     if (!text) return;
     if (window.BCsync && window.BCsync.ready && window.BCsync.logActivity) {
       const t = activeTrip();
-      try { window.BCsync.logActivity({ who: whoAmI() || "Someone", text: text, ts: Date.now(), trip: t ? t.name : "" }); } catch (e) {}
+      try { window.BCsync.logActivity({ who: whoAmI() || "Someone", text: text, ts: Date.now(), trip: t ? t.name : "", tripId: t ? t.id : "" }); } catch (e) {}
     }
   }
   let activityCache = []; let activityWatching = false;
@@ -1634,7 +1656,7 @@
     if (activityWatching || !(window.BCsync && window.BCsync.watchActivity)) return;
     activityWatching = true;
     window.BCsync.watchActivity(val => {
-      const arr = val ? Object.keys(val).map(k => val[k]).filter(Boolean) : [];
+      const arr = val ? Object.keys(val).map(k => (val[k] && typeof val[k] === "object") ? Object.assign({ _key: k }, val[k]) : null).filter(Boolean) : [];
       arr.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       activityCache = arr;
       if (ui.section === "tracker") renderSection();
@@ -1678,20 +1700,58 @@
     const hh = String(d.getHours()).padStart(2,"0"), mm = String(d.getMinutes()).padStart(2,"0");
     return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + hh + ":" + mm;
   }
+  function tripActivity(trip) {
+    return activityCache.filter(a => a.tripId ? (a.tripId === trip.id) : (a.trip === trip.name));
+  }
   function secTracker(trip) {
-    let html = pageHead("Activity Tracker", "A private log of who changed what — visible only to you (admin) on this device.",
+    let html = pageHead("Activity Tracker", "Who changed what on “"+esc(trip.name)+"” — visible only to you (admin), on this device.",
       '<button class="btn" data-action="lock-admin">Lock admin</button><button class="btn danger" data-action="clear-log">Clear log</button>');
     if (!(window.BCsync && window.BCsync.ready)) return html + emptyState(I.tracker, "Activity tracking needs live sync (the shared database).");
     startActivityWatch();
-    if (!activityCache.length) return html + emptyState(I.tracker, "No activity yet. Edits by you and your group will show up here.");
+    const entries = tripActivity(trip);
+    if (!entries.length) return html + emptyState(I.tracker, "No activity yet for this trip. Edits by you and your group will show up here.");
     html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
-    activityCache.forEach(a => {
+    entries.forEach(a => {
       html += '<div class="row-item"><span class="avatar">'+initials(a.who||"?")+'</span>' +
         '<div class="row-main"><div class="row-title" style="font-weight:400"><b>'+esc(a.who||"Someone")+'</b> '+esc(a.text||"")+'</div>' +
-        '<div class="row-sub">'+esc(fmtWhen(a.ts))+(a.trip?' · '+esc(a.trip):"")+'</div></div></div>';
+        '<div class="row-sub">'+esc(fmtWhen(a.ts))+'</div></div></div>';
     });
     html += '</div></div>';
     return html;
+  }
+
+  /* ================= TRIP LOCK (per-trip password, remembered per device) ================= */
+  function unlockedSet() { try { return new Set(JSON.parse(localStorage.getItem("bc.unlocked") || "[]")); } catch (e) { return new Set(); } }
+  function saveUnlocked(s) { try { localStorage.setItem("bc.unlocked", JSON.stringify(Array.from(s))); } catch (e) {} }
+  function isTripUnlocked(t) { if (!t || !t.lockHash) return true; return unlockedSet().has(t.id); }
+  function unlockTrip(id) { const s = unlockedSet(); s.add(id); saveUnlocked(s); }
+  function lockScreen(trip) {
+    return '<div class="card card-pad empty" style="max-width:460px;margin:36px auto">'+I.lock+
+      '<h3 style="font-family:var(--font-display);font-size:1.3rem;margin:8px 0 4px">This trip is locked</h3>' +
+      '<p>Enter the trip password to view it. You\'ll only need to do this once on this device.</p>' +
+      '<button class="btn primary" data-action="unlock-current" style="margin:0 auto">Enter password</button></div>';
+  }
+  function promptTripPassword(t) {
+    openForm({ title: "Enter trip password", submitLabel: "Unlock",
+      fields: [{ key:"pw", label:"This trip is password-protected", type:"password", required:true }],
+      onSubmit: async v => { try { const h = await sha256hex(v.pw); if (h === t.lockHash) { unlockTrip(t.id); state.activeId = t.id; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); toast("Unlocked"); } else { toast("Incorrect password"); promptTripPassword(t); } } catch (e) { toast("Something went wrong"); } }
+    });
+  }
+  function openTripLockManager(t) {
+    if (t.lockHash) {
+      openForm({ title: "Trip password", submitLabel: "Save",
+        fields: [
+          { key:"pw", label:"New password", type:"password", placeholder:"Leave blank to keep the current one" },
+          { key:"remove", label:"Remove lock", type:"checkbox", checkLabel:"Remove the password (make this trip open to everyone)" }
+        ],
+        onSubmit: async v => { if (v.remove) { delete t.lockHash; save(); render(); toast("Lock removed — trip is open"); return; } if (v.pw) { const h = await sha256hex(v.pw); t.lockHash = h; unlockTrip(t.id); save(); render(); toast("Password updated"); } else { toast("No changes made"); } }
+      });
+    } else {
+      openForm({ title: "Lock this trip", submitLabel: "Lock trip",
+        fields: [{ key:"pw", label:"Set a password to view this trip", type:"password", required:true, hint:"People enter this once per device to see this trip — they won't be asked again on that device." }],
+        onSubmit: async v => { const h = await sha256hex(v.pw); t.lockHash = h; unlockTrip(t.id); save(); render(); toast("Trip locked"); }
+      });
+    }
   }
 
   /* ---------- Trip management ---------- */
@@ -1725,6 +1785,16 @@
         b.textContent = "Delete trip"; b.addEventListener("click", () => { closeModal(); confirmDialog("Delete "+t.name+"?", "This permanently removes the trip and all its data for everyone.", () => { const delId = t.id; logActivity("deleted trip “"+t.name+"”"); state.trips = state.trips.filter(x=>x.id!==delId); state.activeId = state.trips[0].id; ui.section="overview"; saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.removeTrip(delId); render(); toast("Trip deleted"); }); });
         foot.insertBefore(b, foot.firstChild); }
     }
+    // add a lock / password control into the modal footer
+    (function () {
+      const foot = document.querySelector("#overlay .modal-foot");
+      if (foot) {
+        const lb = document.createElement("button"); lb.type = "button"; lb.className = "btn"; lb.style.marginRight = "8px";
+        lb.innerHTML = I.lock + (t.lockHash ? " Password" : " Lock trip");
+        lb.addEventListener("click", () => { closeModal(); openTripLockManager(t); });
+        foot.insertBefore(lb, foot.firstChild);
+      }
+    })();
   }
 
   /* ---------- Export / Import ---------- */
@@ -1858,7 +1928,8 @@
         watchActivity(cb) { try { onValue(query(ref(db, "activity"), limitToLast(300)), s => cb(s.val())); } catch (e) { console.warn("watch failed", e); } },
         getAdminHash() { return get(ref(db, "admin/passHash")).then(s => s.exists() ? s.val() : null).catch(() => null); },
         setAdminHash(h) { return set(ref(db, "admin/passHash"), h); },
-        clearActivity() { return remove(ref(db, "activity")); }
+        clearActivity() { return remove(ref(db, "activity")); },
+        removeActivityKeys(keys) { try { (keys || []).forEach(k => remove(ref(db, "activity/" + k))); } catch (e) { console.warn("removeKeys failed", e); } }
       };
       if (window.__bcApp) window.__bcApp.refresh(); // reflect "Live sync on"
       let seeded = false;
