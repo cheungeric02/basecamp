@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2F5A49">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <title>Basecamp</title>
 <style>
   :root {
@@ -355,6 +358,39 @@
     .cols-4, .cols-3, .cols-2 { grid-template-columns: 1fr; }
     .field.row2 { grid-template-columns: 1fr; }
   }
+
+  /* ============ Material 3 preview scope (Overview + Meals) ============ */
+  .content.md {
+    font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+    --md-e1: 0 1px 2px rgba(0,0,0,.26), 0 1px 3px 1px rgba(0,0,0,.10);
+    --md-e2: 0 1px 2px rgba(0,0,0,.26), 0 2px 8px 2px rgba(0,0,0,.12);
+    --md-e3: 0 4px 10px 3px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.26);
+  }
+  .content.md h2, .content.md h3, .content.md h4 { font-family: 'Roboto', system-ui, sans-serif; letter-spacing: 0; }
+  .content.md .page-head h2 { font-weight: 400; }
+  .content.md h3, .content.md h4, .content.md .day-head h4 { font-weight: 500; }
+  .content.md .card { border: none; border-radius: 16px; box-shadow: var(--md-e1); }
+  .content.md .stat { border-radius: 16px; }
+  .content.md .btn { border-radius: 20px; padding: 9px 18px; font-weight: 500; text-transform: none;
+    border: 1px solid var(--border-strong); background: var(--surface); transition: box-shadow .15s ease, background .15s ease; }
+  .content.md .btn:hover { background: var(--surface-2); box-shadow: var(--md-e1); }
+  .content.md .btn.sm { padding: 6px 14px; border-radius: 16px; }
+  .content.md .btn.primary { background: var(--accent); border-color: transparent; box-shadow: var(--md-e1); }
+  .content.md .btn.primary:hover { box-shadow: var(--md-e2); }
+  .content.md .pill { border-radius: 8px; font-family: 'Roboto', sans-serif; font-weight: 500; }
+  .content.md .cd-num { font-family: 'Roboto', sans-serif; font-weight: 500; }
+  .content.md .inline-select { border-radius: 8px; }
+  .content.md .page-head .btn.primary { display: none; }  /* replaced by the FAB */
+
+  .content.md .md-fab { position: fixed; right: 24px; bottom: 24px; z-index: 40; display: inline-flex; align-items: center;
+    gap: 8px; padding: 15px 22px; border: none; border-radius: 18px; background: var(--accent); color: #fff;
+    font-family: 'Roboto', sans-serif; font-weight: 600; font-size: .95rem; box-shadow: var(--md-e3); cursor: pointer; }
+  .content.md .md-fab svg { width: 20px; height: 20px; }
+  .content.md .md-fab:hover { filter: brightness(1.04); box-shadow: var(--md-e2); }
+  @media (prefers-color-scheme: dark) { .content.md .md-fab { color: #10150F; } }
+  :root[data-theme="dark"] .content.md .md-fab { color: #10150F; }
+  :root[data-theme="light"] .content.md .md-fab { color: #fff; }
+  @media (max-width: 860px) { .content.md .md-fab { bottom: calc(86px + env(safe-area-inset-bottom, 0px)); } }
 </style>
 </head>
 <body>
@@ -739,9 +775,10 @@
     const trip = activeTrip();
     document.title = (trip && trip.name) ? (trip.name + " · Basecamp") : "Basecamp";
     const app = document.getElementById("app");
+    const mdOn = (ui.section === "overview" || ui.section === "meals");
     app.innerHTML =
       '<div class="app">' + renderSidebar(trip) +
-      '<div class="main"><div class="content" id="content"></div></div></div>';
+      '<div class="main"><div class="content'+(mdOn ? " md" : "")+'" id="content"></div></div></div>';
     renderSection();
     scrollNavToActive();
   }
@@ -984,8 +1021,9 @@
   const MEAL_ORDER = { "Breakfast":0, "Lunch":1, "Dinner":2, "Snack":3, "Drinks":4 };
   function secMeals(trip) {
     let html = pageHead("Meals & Menu", "What you're eating, and who's cooking.", addBtn("add-meal","Add meal"));
+    const mealFab = '<button class="md-fab" data-action="add-meal" title="Add meal">'+I.plus+' Add meal</button>';
     const days = tripDays(trip);
-    if (!trip.meals.length) return html + emptyState(I.meals, "No meals planned yet. Build out the menu day by day.", "add-meal", "Add first meal");
+    if (!trip.meals.length) return html + emptyState(I.meals, "No meals planned yet. Build out the menu day by day.", "add-meal", "Add first meal") + mealFab;
     const groups = days.length ? days.slice() : [];
     trip.meals.forEach(m => { if (groups.indexOf(m.day) < 0) groups.push(m.day || ""); });
     groups.forEach(day => {
@@ -1003,7 +1041,7 @@
       });
       html += '</div></div>';
     });
-    return html;
+    return html + mealFab;
   }
   function mealFields(trip) {
     const days = tripDays(trip);
