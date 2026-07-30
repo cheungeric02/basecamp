@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2F5A49">
-<title>Basecamp — Bon Echo Trip</title>
+<title>Basecamp</title>
 <style>
   :root {
     --bg: #EAEDE4;
@@ -730,6 +730,7 @@
   ========================================================= */
   function render() {
     const trip = activeTrip();
+    document.title = (trip && trip.name) ? (trip.name + " · Basecamp") : "Basecamp";
     const app = document.getElementById("app");
     app.innerHTML =
       '<div class="app">' + renderSidebar(trip) +
