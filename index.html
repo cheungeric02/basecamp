@@ -369,24 +369,47 @@
   .content.md h2, .content.md h3, .content.md h4 { font-family: 'Roboto', system-ui, sans-serif; letter-spacing: 0; }
   .content.md .page-head h2 { font-weight: 400; }
   .content.md h3, .content.md h4, .content.md .day-head h4 { font-weight: 500; }
-  .content.md .card { border: none; border-radius: 16px; box-shadow: var(--md-e1); }
-  .content.md .stat { border-radius: 16px; }
-  .content.md .btn { border-radius: 20px; padding: 9px 18px; font-weight: 500; text-transform: none;
-    border: 1px solid var(--border-strong); background: var(--surface); transition: box-shadow .15s ease, background .15s ease; }
+  /* Expressive: big rounded surfaces */
+  .content.md .card { border: none; border-radius: 28px; box-shadow: var(--md-e1); }
+  .content.md .card-pad { padding: 22px 24px; }
+  .content.md .stat { border-radius: 28px; padding: 20px 22px; }
+  .content.md .day-head { margin: 24px 0 12px; }
+
+  /* Expressive: fully-rounded (pill) buttons with springy press */
+  .content.md .btn { border-radius: 999px; padding: 10px 22px; font-weight: 600; text-transform: none;
+    border: 1px solid var(--border-strong); background: var(--surface); transition: box-shadow .15s ease, background .15s ease, transform .1s ease; }
   .content.md .btn:hover { background: var(--surface-2); box-shadow: var(--md-e1); }
-  .content.md .btn.sm { padding: 6px 14px; border-radius: 16px; }
+  .content.md .btn:active { transform: scale(.96); }
+  .content.md .btn.sm { padding: 8px 16px; border-radius: 999px; }
   .content.md .btn.primary { background: var(--accent); border-color: transparent; box-shadow: var(--md-e1); }
   .content.md .btn.primary:hover { box-shadow: var(--md-e2); }
-  .content.md .pill { border-radius: 8px; font-family: 'Roboto', sans-serif; font-weight: 500; }
-  .content.md .cd-num { font-family: 'Roboto', sans-serif; font-weight: 500; }
-  .content.md .inline-select { border-radius: 8px; }
+
+  .content.md .pill { border-radius: 999px; padding: 5px 14px; font-family: 'Roboto', sans-serif; font-weight: 600; }
+  .content.md .cd-num { font-family: 'Roboto', sans-serif; font-weight: 700; }
+
+  /* Expressive: round, tonal dropdown menus */
+  .content.md .inline-select { border-radius: 999px; padding: 9px 32px 9px 16px; background-color: var(--accent-soft);
+    color: var(--accent-ink); border-color: transparent; font-weight: 600; max-width: 160px; }
+
+  /* Expressive: circular, contrasting action icons (edit = tonal green, delete = tonal red) */
+  .content.md .row-actions { opacity: 1; gap: 8px; }
+  .content.md .icon-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2);
+    transition: transform .1s ease, filter .12s ease; }
+  .content.md .icon-btn:active { transform: scale(.9); }
+  .content.md .icon-btn[data-action^="edit"] { background: var(--accent-soft); color: var(--accent-ink); }
+  .content.md .icon-btn[data-action^="del"] { background: var(--danger-soft); color: var(--danger); }
+  .content.md .icon-btn:hover { filter: brightness(.97); }
+
   .content.md .page-head .btn.primary { display: none; }  /* replaced by the FAB */
 
+  /* Expressive: large, bold FAB */
   .content.md .md-fab { position: fixed; right: 24px; bottom: 24px; z-index: 40; display: inline-flex; align-items: center;
-    gap: 8px; padding: 15px 22px; border: none; border-radius: 18px; background: var(--accent); color: #fff;
-    font-family: 'Roboto', sans-serif; font-weight: 600; font-size: .95rem; box-shadow: var(--md-e3); cursor: pointer; }
-  .content.md .md-fab svg { width: 20px; height: 20px; }
-  .content.md .md-fab:hover { filter: brightness(1.04); box-shadow: var(--md-e2); }
+    gap: 10px; padding: 18px 26px; border: none; border-radius: 28px; background: var(--accent); color: #fff;
+    font-family: 'Roboto', sans-serif; font-weight: 700; font-size: 1rem; box-shadow: var(--md-e3); cursor: pointer;
+    transition: transform .12s ease, box-shadow .15s ease, filter .12s ease; }
+  .content.md .md-fab svg { width: 22px; height: 22px; }
+  .content.md .md-fab:hover { filter: brightness(1.04); box-shadow: var(--md-e2); transform: translateY(-1px); }
+  .content.md .md-fab:active { transform: scale(.96); }
   @media (prefers-color-scheme: dark) { .content.md .md-fab { color: #10150F; } }
   :root[data-theme="dark"] .content.md .md-fab { color: #10150F; }
   :root[data-theme="light"] .content.md .md-fab { color: #fff; }
@@ -1019,6 +1042,7 @@
 
   /* ---------- Meals ---------- */
   const MEAL_ORDER = { "Breakfast":0, "Lunch":1, "Dinner":2, "Snack":3, "Drinks":4 };
+  const MEAL_TONE = { "Breakfast":"warn", "Lunch":"info", "Dinner":"green", "Snack":"ember", "Drinks":"info" };
   function secMeals(trip) {
     let html = pageHead("Meals & Menu", "What you're eating, and who's cooking.", addBtn("add-meal","Add meal"));
     const mealFab = '<button class="md-fab" data-action="add-meal" title="Add meal">'+I.plus+' Add meal</button>';
@@ -1033,7 +1057,7 @@
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
       meals.forEach(m => {
         html += '<div class="row-item meal-item">' +
-          '<span class="pill green" style="min-width:74px;justify-content:center">'+esc(m.type||"Meal")+'</span>' +
+          '<span class="pill '+(MEAL_TONE[m.type]||"green")+'" style="min-width:74px;justify-content:center">'+esc(m.type||"Meal")+'</span>' +
           '<div class="row-main"><div class="row-title">'+esc(m.name||"(unnamed)")+'</div>' +
           (m.notes?'<div class="row-sub">'+esc(m.notes)+'</div>':"") + '</div>' +
           '<span class="assign-wrap"><span class="label">Cook</span>'+personSelectInline(trip, m.personId, "assign-meal", m.id)+'</span>' +
