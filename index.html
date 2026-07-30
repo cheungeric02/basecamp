@@ -424,6 +424,7 @@
   /* Nav: expressive pill items + Material active indicator */
   .nav-item { border-radius: 999px; }
   .nav-ind { display: inline-flex; align-items: center; justify-content: center; }
+  .nav-item[data-section="settings"] { display: none; }  /* desktop uses the sidebar chrome instead */
 
   /* Expressive theme segmented toggle */
   .theme-seg { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
@@ -442,6 +443,10 @@
     .nav-item.active { background: transparent; }
     .nav-item .nav-ind { padding: 5px 18px; border-radius: 999px; transition: background .18s ease; }
     .nav-item.active .nav-ind { background: var(--accent-soft); }
+    /* mobile: move the top chrome into the Settings page */
+    .trip-switch, .sidebar-foot { display: none; }
+    .sidebar { border-bottom: none; }
+    .nav-item[data-section="settings"] { display: flex; }
   }
 </style>
 </head>
@@ -485,6 +490,7 @@
     theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
     tracker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-12 2 6h6"/></svg>',
@@ -858,10 +864,16 @@
     };
   }
 
+  function themeSeg() {
+    return '<div class="theme-seg" role="group" aria-label="Theme">' +
+      '<button class="seg'+(state.theme!=="dark"?" on":"")+'" data-action="set-theme" data-theme="light" title="Light mode" aria-label="Light mode">'+I.sun+'</button>' +
+      '<button class="seg'+(state.theme==="dark"?" on":"")+'" data-action="set-theme" data-theme="dark" title="Dark mode" aria-label="Dark mode">'+I.moon+'</button>' +
+    '</div>';
+  }
   function renderSidebar(trip) {
     const c = counts(trip);
     const live = !!(window.BCsync && window.BCsync.ready);
-    const themeLabel = { auto: "Auto", light: "Light", dark: "Dark" }[state.theme||"auto"];
+    const navList = NAV.concat(isAdmin() ? [{ id:"tracker", label:"Tracker", short:"Tracker", icon:I.tracker }] : []).concat([{ id:"settings", label:"Settings", short:"Settings", icon:I.settings }]);
     return '<aside class="sidebar">' +
       '<div class="trip-switch">' +
         '<select data-action="switch-trip" aria-label="Active trip">' +
@@ -872,17 +884,14 @@
           '<button class="btn sm" data-action="edit-trip" title="Edit trip details">'+I.edit+'</button>' +
         '</div>' +
       '</div>' +
-      '<nav class="nav">' + (isAdmin() ? NAV.concat([{ id:"tracker", label:"Tracker", short:"Tracker", icon:I.tracker }]) : NAV).map(n => {
+      '<nav class="nav">' + navList.map(n => {
         const badge = c[n.id] ? '<span class="badge num">'+c[n.id]+'</span>' : "";
         return '<button class="nav-item'+(ui.section===n.id?" active":"")+'" data-action="nav" data-section="'+n.id+'"><span class="nav-ind">'+n.icon+'</span><span class="nav-full">'+n.label+'</span><span class="nav-short">'+(n.short||n.label)+'</span>'+badge+'</button>';
       }).join("") + '</nav>' +
       '<div class="sidebar-foot">' +
-        '<button class="btn sm" data-action="export" title="Download a backup">'+I.download+' Export</button>' +
-        '<button class="btn sm" data-action="import" title="Load a backup">'+I.upload+' Import</button>' +
-        '<div class="theme-seg" role="group" aria-label="Theme">' +
-          '<button class="seg'+(state.theme!=="dark"?" on":"")+'" data-action="set-theme" data-theme="light" title="Light mode" aria-label="Light mode">'+I.sun+'</button>' +
-          '<button class="seg'+(state.theme==="dark"?" on":"")+'" data-action="set-theme" data-theme="dark" title="Dark mode" aria-label="Dark mode">'+I.moon+'</button>' +
-        '</div>' +
+        '<button class="btn sm" data-action="export" title="Download a backup">'+I.download+' Backup</button>' +
+        (isAdmin() ? '<button class="btn sm" data-action="import" title="Restore from a backup (admin)">'+I.upload+' Restore</button>' : "") +
+        themeSeg() +
         '<button class="btn sm" data-action="admin" title="Admin / activity tracker">'+I.lock+' Admin'+(isAdmin()?" (on)":"")+'</button>' +
         '<div class="label" style="width:100%;margin-top:8px;display:flex;align-items:center;gap:7px;text-transform:none;letter-spacing:.02em">' +
           '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>' +
@@ -890,6 +899,35 @@
         '<div class="label" style="width:100%;margin-top:4px;text-transform:none;letter-spacing:.02em">You: <b style="color:var(--ink)">'+esc(whoAmI()||"—")+'</b> · <button data-action="change-who" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;text-decoration:underline">change</button></div>' +
       '</div>' +
     '</aside>';
+  }
+  function secSettings(trip) {
+    const live = !!(window.BCsync && window.BCsync.ready);
+    const selStyle = "width:100%;padding:11px 16px;border:1px solid var(--border-strong);border-radius:999px;background:var(--surface-2);color:var(--ink);font-weight:600";
+    let html = pageHead("Settings", "Trips, your name, backups and appearance.", "");
+    html += '<div class="section-title"><h3>Trip</h3></div>';
+    html += '<div class="card card-pad" style="display:flex;flex-direction:column;gap:12px">' +
+      '<select data-action="switch-trip" aria-label="Active trip" style="'+selStyle+'">' +
+        state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 Locked trip" : t.name)+'</option>'; }).join("") +
+      '</select>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn primary" data-action="new-trip">'+I.plus+' New trip</button>' +
+        '<button class="btn" data-action="edit-trip">'+I.edit+' Edit trip</button>' +
+      '</div></div>';
+    html += '<div class="section-title" style="margin-top:18px"><h3>You</h3></div>';
+    html += '<div class="card card-pad" style="display:flex;align-items:center;gap:12px">' +
+      '<span class="avatar">'+initials(whoAmI()||"?")+'</span>' +
+      '<div style="flex:1;min-width:0"><div class="row-title">'+esc(whoAmI()||"Tap Change to set your name")+'</div>' +
+      '<div class="row-sub" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>'+(live?"Live sync on — shared with your group":"Local only (this device)")+'</div></div>' +
+      '<button class="btn sm" data-action="change-who">Change</button></div>';
+    html += '<div class="section-title" style="margin-top:18px"><h3>Appearance</h3></div>';
+    html += '<div class="card card-pad" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span style="font-weight:600">Theme</span>'+themeSeg()+'</div>';
+    html += '<div class="section-title" style="margin-top:18px"><h3>Data &amp; admin</h3></div>';
+    html += '<div class="card card-pad" style="display:flex;flex-direction:column;gap:10px">' +
+      '<button class="btn" data-action="export">'+I.download+' Backup (download a copy)</button>' +
+      (isAdmin() ? '<button class="btn" data-action="import">'+I.upload+' Restore from backup</button>' : "") +
+      '<button class="btn" data-action="admin">'+I.lock+' Admin'+(isAdmin()?" — unlocked":"")+'</button>' +
+      '</div>';
+    return html;
   }
 
   function pageHead(title, sub, actionsHtml) {
@@ -923,7 +961,7 @@
     const el = document.getElementById("content");
     if (trip && trip.lockHash && !isTripUnlocked(trip)) { el.innerHTML = lockScreen(trip); return; }
     const map = { overview: secOverview, weather: secWeather, meals: secMeals, shopping: secShopping,
-      roles: secRoles, schedule: secSchedule, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker };
+      roles: secRoles, schedule: secSchedule, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker, settings: secSettings };
     el.innerHTML = (map[ui.section] || secOverview)(trip);
     if (ui.section === "notes") wireNotes(trip);
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
@@ -1910,24 +1948,28 @@
     } catch (e) { toast("Export not available here"); }
   }
   function doImport() {
-    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
-    inp.addEventListener("change", () => {
-      const file = inp.files[0]; if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(reader.result);
-          if (!data || !Array.isArray(data.trips)) throw new Error("bad");
-          confirmDialog("Import backup", "This replaces all "+state.trips.length+" trip"+(state.trips.length===1?"":"s")+" currently on this device with "+data.trips.length+" from the file. Export first if you want to keep the current data.", () => {
-            state = data; if (!state.activeId || !state.trips.find(t=>t.id===state.activeId)) state.activeId = state.trips[0].id;
-            state.trips.forEach(t => { ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people"].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; }); if(typeof t.notes!=="string") t.notes=""; });
-            ui.section = "overview"; applyTheme(); saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.writeAll(state.trips); render(); toast("Imported "+data.trips.length+" trip"+(data.trips.length===1?"":"s"));
-          }, "Replace & import");
-        } catch (e) { toast("Couldn't read that file — is it a Basecamp backup?"); }
-      };
-      reader.readAsText(file);
-    });
-    inp.click();
+    if (!isAdmin()) { toast("Only the admin can restore a backup"); return; }
+    confirmDialog("Restore a backup?", "⚠ This replaces ALL current trips with the ones from the backup file — for everyone in your group, not just you. It can't be undone. Are you sure you want to continue?", () => {
+      const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
+      inp.addEventListener("change", () => {
+        const file = inp.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            if (!data || !Array.isArray(data.trips)) throw new Error("bad");
+            state = data;
+            if (state.theme !== "light" && state.theme !== "dark") state.theme = "light";
+            if (!state.activeId || !state.trips.find(t=>t.id===state.activeId)) state.activeId = state.trips[0].id;
+            state.trips.forEach(t => ensureShape(t));
+            ui.section = "overview"; applyTheme(); saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.writeAll(state.trips); render();
+            toast("Backup restored (" + data.trips.length + " trip" + (data.trips.length===1?"":"s") + ")");
+          } catch (e) { toast("Couldn't read that file — is it a Basecamp backup?"); }
+        };
+        reader.readAsText(file);
+      });
+      inp.click();
+    }, "Yes, continue");
   }
 
   /* ---------- Global event handling ---------- */
