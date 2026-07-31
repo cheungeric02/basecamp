@@ -1090,15 +1090,48 @@
   /* ---------- Weather ---------- */
   function secWeather(trip) {
     const days = tripDays(trip);
-    let html = pageHead("Info", "Live weather, the location map, and nearest emergency services.", "");
+    let html = pageHead("Info", "", "");
+    // Live weather
     html += '<div class="card card-pad" id="liveWx" style="margin-bottom:18px">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading current conditions…</p>')+'</div>';
 
-    // location map + emergency services
+    // Daily forecast (directly under live weather)
+    html += '<div class="section-title"><h3>Daily forecast</h3></div>';
+    if (!days.length) {
+      html += '<div class="card card-pad" style="color:var(--muted)">Set trip dates in Edit trip to lay out the daily forecast.</div>';
+    } else {
+      html += '<div class="card card-pad" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;background:var(--info-soft);border-color:transparent">' +
+        '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Closer to the trip, fill in each day\'s forecast — tap a card to edit.</span></div>';
+      html += '<div class="wx-grid">';
+      days.forEach(d => {
+        const w = (trip.weather||[]).find(x => x.date === d) || { date: d };
+        const filled = w.high || w.low || w.condition;
+        html += '<button class="card wx" data-action="edit-weather" data-id="'+d+'" style="text-align:left;cursor:pointer;color:inherit">' +
+          '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
+          (filled ?
+            '<div class="temps"><span class="hi">'+esc(w.high||"—")+'°</span><span class="lo">/ '+esc(w.low||"—")+'°</span></div>' +
+            '<div class="cond"><span class="pill info">'+esc(w.condition||"—")+'</span></div>' +
+            (w.precip?'<div class="row-sub" style="margin-top:8px">Precip: '+esc(w.precip)+'</div>':"") +
+            (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"")
+            : '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Tap to add forecast</div>') +
+          '</button>';
+      });
+      html += '</div>';
+    }
+
+    // Check-in / Check-out
+    html += '<div class="section-title" style="margin-top:22px"><h3>Check-in &amp; check-out</h3></div>';
+    html += '<div class="card card-pad" style="display:flex;gap:28px;flex-wrap:wrap;align-items:center">' +
+      '<div><div class="label">Check-in</div><div style="font-family:var(--font-display);font-size:1.4rem;margin-top:4px">'+esc(trip.checkin||"—")+'</div></div>' +
+      '<div><div class="label">Check-out</div><div style="font-family:var(--font-display);font-size:1.4rem;margin-top:4px">'+esc(trip.checkout||"—")+'</div></div>' +
+      (!(trip.checkin || trip.checkout) ? '<button class="btn sm" data-action="edit-trip" style="margin-left:auto">Set times</button>' : '<button class="btn sm" data-action="edit-trip" style="margin-left:auto">Edit</button>') +
+      '</div>';
+
+    // Location + Emergency services
     if (trip.location || (trip.lat && trip.lon)) {
       const q = (trip.lat && trip.lon) ? (trip.lat + "," + trip.lon) : trip.location;
       const enc = encodeURIComponent(q);
       const hosp = encodeURIComponent("hospital near " + q);
-      html += '<div class="section-title"><h3>Location</h3></div>';
+      html += '<div class="section-title" style="margin-top:22px"><h3>Location</h3></div>';
       html += '<div class="card" style="overflow:hidden;margin-bottom:18px">' +
         '<iframe title="Location map" src="https://maps.google.com/maps?q='+enc+'&z=12&output=embed" style="width:100%;height:300px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
         '<div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
@@ -1113,26 +1146,6 @@
         '<iframe title="Nearest hospitals" src="https://maps.google.com/maps?q='+hosp+'&z=10&output=embed" style="width:100%;height:260px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
         '<div class="card-pad"><a class="btn sm" href="https://www.google.com/maps/search/?api=1&query='+hosp+'" target="_blank" rel="noopener">Find nearest hospital / ER</a></div></div>';
     }
-
-    if (!days.length) return html + emptyState(I.infoTab, "Set trip dates to lay out the daily forecast.", "edit-trip", "Set dates");
-    html += '<div class="section-title"><h3>Daily forecast</h3></div>';
-    html += '<div class="card card-pad" style="margin-bottom:18px;display:flex;gap:10px;align-items:center;background:var(--info-soft);border-color:transparent">' +
-      '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Around Aug 7, check a forecast for '+esc(trip.location||"your destination")+' and fill in each day. Click a card to edit.</span></div>';
-    html += '<div class="wx-grid">';
-    days.forEach(d => {
-      const w = (trip.weather||[]).find(x => x.date === d) || { date: d };
-      const filled = w.high || w.low || w.condition;
-      html += '<button class="card wx" data-action="edit-weather" data-id="'+d+'" style="text-align:left;cursor:pointer;color:inherit">' +
-        '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
-        (filled ?
-          '<div class="temps"><span class="hi">'+esc(w.high||"—")+'°</span><span class="lo">/ '+esc(w.low||"—")+'°</span></div>' +
-          '<div class="cond"><span class="pill info">'+esc(w.condition||"—")+'</span></div>' +
-          (w.precip?'<div class="row-sub" style="margin-top:8px">Precip: '+esc(w.precip)+'</div>':"") +
-          (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"")
-          : '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Tap to add forecast</div>') +
-        '</button>';
-    });
-    html += '</div>';
     return html;
   }
 
@@ -1944,12 +1957,14 @@
     { key:"site", label:"Site / address detail", type:"text", placeholder:"e.g. Campground — Site 12" },
     { key:"startDate", label:"Start date", type:"date", row:true },
     { key:"endDate", label:"End date", type:"date" },
+    { key:"checkin", label:"Check-in time", type:"text", placeholder:"e.g. 2:00 PM", row:true },
+    { key:"checkout", label:"Check-out time", type:"text", placeholder:"e.g. 2:00 PM" },
     { key:"lat", label:"Latitude (optional)", type:"number", placeholder:"e.g. 44.90", row:true },
     { key:"lon", label:"Longitude (optional)", type:"number", placeholder:"e.g. -77.21" },
   ];
   function newTrip() {
     openForm({ title:"New trip", submitLabel:"Create trip", fields: tripFields, values:{}, onSubmit: v => {
-      const t = blankTrip(v.name); t.location=v.location; t.site=v.site; t.startDate=v.startDate; t.endDate=v.endDate; t.lat=v.lat; t.lon=v.lon;
+      const t = blankTrip(v.name); t.location=v.location; t.site=v.site; t.startDate=v.startDate; t.endDate=v.endDate; t.checkin=v.checkin; t.checkout=v.checkout; t.lat=v.lat; t.lon=v.lon;
       state.trips.push(t); state.activeId = t.id; ui.section = "overview"; save(); logActivity("created trip “"+v.name+"”"); render();
       toast("Trip created — add your crew in Guests");
     }});
@@ -1958,7 +1973,7 @@
     const t = activeTrip();
     const fields = tripFields.concat([]);
     openForm({ title:"Trip details", fields: fields, values: t, onSubmit: v => {
-      Object.assign(t, { name:v.name, location:v.location, site:v.site, startDate:v.startDate, endDate:v.endDate, lat:v.lat, lon:v.lon });
+      Object.assign(t, { name:v.name, location:v.location, site:v.site, startDate:v.startDate, endDate:v.endDate, checkin:v.checkin, checkout:v.checkout, lat:v.lat, lon:v.lon });
       liveWxCache = null; save(); logActivity("updated the trip details"); render(); toast("Trip updated");
     }, extraFooter: true });
     // add a delete-trip control into the modal footer
