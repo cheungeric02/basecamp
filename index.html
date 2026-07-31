@@ -249,6 +249,11 @@
   .pack-sec-head .chev { display: inline-flex; color: var(--muted); transition: transform .18s ease; }
   .pack-sec-head .chev svg { width: 20px; height: 20px; }
   .pack-sec-head.collapsed .chev { transform: rotate(-90deg); }
+  .ming-toggle.on { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+  .ming-panel { margin: 2px 0 10px; padding: 12px 14px; background: var(--surface-2); border-radius: 16px; }
+  .ming-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+  .ming-input { flex: 1; padding: 9px 14px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; }
+  .bringer.done-ing { opacity: .6; text-decoration: line-through; }
 
   .day-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
   .day-head h4 { font-family: var(--font-display); font-size: 1.15rem; }
@@ -515,7 +520,7 @@
   const NAV = [
     { id: "overview", label: "Overview", icon: I.overview },
     { id: "weather", label: "Info", short: "Info", icon: I.infoTab },
-    { id: "meals", label: "Meals & Menu", short: "Meals", icon: I.meals },
+    { id: "meals", label: "Meals", short: "Meals", icon: I.meals },
     { id: "shopping", label: "Shopping", icon: I.shopping },
     { id: "roles", label: "Roles", icon: I.roles },
     { id: "schedule", label: "Schedule", icon: I.schedule },
@@ -567,6 +572,7 @@
   let ui = { section: "overview" };
   let filterPacking = new Set(), filterShopping = new Set();
   const collapsedCats = {};
+  const expandedMeals = {};
 
   function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { console.warn("save failed", e); } }
   function syncActive() { const t = activeTrip(); if (t && window.BCsync && window.BCsync.ready) window.BCsync.writeTrip(t.id, t); }
@@ -972,6 +978,7 @@
       roles: secRoles, schedule: secSchedule, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker, settings: secSettings };
     el.innerHTML = (map[ui.section] || secOverview)(trip);
     if (ui.section === "notes") wireNotes(trip);
+    if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
     if (ui.section === "tracker") startActivityWatch();
   }
@@ -1017,10 +1024,11 @@
     let mealTile;
     if (nextMeal) {
       const when = (nextMeal.day ? fmtDate(nextMeal.day, "dow") : "") + (nextMeal.type ? " · " + nextMeal.type : "");
-      const cook = nextMeal.personId ? ("Cook: " + personName(trip, nextMeal.personId)) : "Cook: TBD";
+      const ic = mealIngredients(trip, nextMeal).length;
+      const isub = ic ? (ic + " ingredient" + (ic===1?"":"s") + " listed") : "on the menu";
       mealTile = '<div class="card stat tone-info"><div class="label">Upcoming meal'+(when?" · "+esc(when):"")+'</div>' +
         '<div class="val" style="font-size:1.35rem;line-height:1.25;margin-top:8px">'+esc(nextMeal.name)+'</div>' +
-        '<div class="sub">'+esc(cook)+'</div></div>';
+        '<div class="sub">'+esc(isub)+'</div></div>';
     } else {
       mealTile = '<div class="card stat tone-info"><div class="label">Upcoming meal</div>' +
         '<div class="val" style="font-size:1.35rem;margin-top:8px;color:var(--muted)">—</div><div class="sub">No meals planned yet</div></div>';
@@ -1151,8 +1159,21 @@
   /* ---------- Meals ---------- */
   const MEAL_ORDER = { "Breakfast":0, "Lunch":1, "Dinner":2, "Snack":3, "Drinks":4 };
   const MEAL_TONE = { "Breakfast":"warn", "Lunch":"info", "Dinner":"green", "Snack":"ember", "Drinks":"info" };
+  function mealIngredients(trip, m) { return (trip.shopping || []).filter(s => s.mealId === m.id); }
+  function addMealIngredient(mealId, val) {
+    val = (val||"").trim(); if (!val) return;
+    const t = activeTrip(); const m = findById(t.meals, mealId); if (!m) return;
+    t.shopping.push({ id: uid(), item: val, category: "Food & Drink", qty: "", forMeal: m.name, mealId: m.id, gotIt: false, assignedIds: [] });
+    expandedMeals[mealId] = true;
+    save(); logActivity("added ingredient “"+val+"” for “"+m.name+"”"); render(); toast("Added to the shopping list");
+  }
+  function wireMeals() {
+    document.querySelectorAll(".ming-input").forEach(inp => {
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addMealIngredient(inp.dataset.id, inp.value); } });
+    });
+  }
   function secMeals(trip) {
-    let html = pageHead("Meals & Menu", "What you're eating, and who's cooking.", addBtn("add-meal","Add meal"));
+    let html = pageHead("Meals", "What you're eating, and the ingredients you need.", addBtn("add-meal","Add meal"));
     const days = tripDays(trip);
     if (!trip.meals.length) return html + emptyState(I.meals, "No meals planned yet. Build out the menu day by day.", "add-meal", "Add first meal");
     const groups = days.length ? days.slice() : [];
@@ -1163,12 +1184,22 @@
       html += '<div class="day-head"><h4>'+esc(day?fmtDate(day,"long"):"Unscheduled")+'</h4></div>';
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
       meals.forEach(m => {
+        const ings = mealIngredients(trip, m);
+        const exp = !!expandedMeals[m.id];
         html += '<div class="row-item meal-item">' +
           '<span class="pill '+(MEAL_TONE[m.type]||"green")+'" style="min-width:74px;justify-content:center">'+esc(m.type||"Meal")+'</span>' +
           '<div class="row-main"><div class="row-title">'+esc(m.name||"(unnamed)")+'</div>' +
           (m.notes?'<div class="row-sub">'+esc(m.notes)+'</div>':"") + '</div>' +
-          '<span class="assign-wrap"><span class="label">Cook</span>'+personSelectInline(trip, m.personId, "assign-meal", m.id)+'</span>' +
+          '<button class="btn sm ming-toggle'+(exp?" on":"")+'" data-action="toggle-meal-ing" data-id="'+m.id+'">'+I.shopping+' Ingredients'+(ings.length?' · '+ings.length:"")+'</button>' +
           rowActions("edit-meal","del-meal",m.id) + '</div>';
+        if (exp) {
+          html += '<div class="ming-panel">' +
+            (ings.length
+              ? '<div class="ming-list">' + ings.map(s => '<span class="bringer'+(s.gotIt?" done-ing":"")+'">'+esc(s.item)+'<button class="bx" data-action="del-meal-ing" data-id="'+s.id+'" title="Remove">×</button></span>').join("") + '</div>'
+              : '<div class="row-sub" style="margin-bottom:10px">No ingredients yet — add them here and they\'ll appear on the Shopping list, linked to this meal.</div>') +
+            '<div style="display:flex;gap:8px"><input type="text" class="ming-input" id="ming_'+m.id+'" data-id="'+m.id+'" placeholder="Add an ingredient…"><button class="btn primary sm" data-action="add-meal-ing" data-id="'+m.id+'">'+I.plus+' Add</button></div>' +
+          '</div>';
+        }
       });
       html += '</div></div>';
     });
@@ -1180,8 +1211,7 @@
       { key:"day", label:"Day", type:"select", options: () => (days.length?days:[""]).map(d => ({value:d, label: d?fmtDate(d,"long"):"Unscheduled"})) },
       { key:"type", label:"Meal", type:"select", options:["Breakfast","Lunch","Dinner","Snack","Drinks"] },
       { key:"name", label:"Dish / menu", type:"text", required:true, placeholder:"e.g. Steak BBQ" },
-      { key:"personId", label:"Who's cooking", type:"person" },
-      { key:"notes", label:"Notes", type:"textarea", placeholder:"Ingredients, prep, dietary notes…" },
+      { key:"notes", label:"Notes", type:"textarea", placeholder:"Prep or dietary notes… (add ingredients from the meal's Ingredients list)" },
     ];
   }
 
@@ -1629,8 +1659,11 @@
 
     // meals
     "add-meal": () => { const t = activeTrip(); openForm({ title:"Add meal", fields: mealFields(t), values:{ type:"Dinner", day:(tripDays(t)[0]||"") }, onSubmit: v => { t.meals.push(Object.assign({id:uid()}, v)); save(); logActivity("added meal “"+v.name+"”"); render(); toast("Meal added"); } }); },
-    "edit-meal": (el) => { const t = activeTrip(); const m = findById(t.meals, el.dataset.id); openForm({ title:"Edit meal", fields: mealFields(t), values:m, onSubmit: v => { Object.assign(m, v); save(); logActivity("edited meal “"+m.name+"”"); render(); toast("Saved"); } }); },
+    "edit-meal": (el) => { const t = activeTrip(); const m = findById(t.meals, el.dataset.id); openForm({ title:"Edit meal", fields: mealFields(t), values:m, onSubmit: v => { Object.assign(m, v); t.shopping.forEach(s => { if (s.mealId === m.id) s.forMeal = m.name; }); save(); logActivity("edited meal “"+m.name+"”"); render(); toast("Saved"); } }); },
     "del-meal": (el) => delItem("meals", el.dataset.id, "Delete this meal?"),
+    "toggle-meal-ing": (el) => { expandedMeals[el.dataset.id] = !expandedMeals[el.dataset.id]; render(); },
+    "add-meal-ing": (el) => { const inp = document.getElementById("ming_"+el.dataset.id); addMealIngredient(el.dataset.id, inp ? inp.value : ""); },
+    "del-meal-ing": (el) => { const t = activeTrip(); t.shopping = t.shopping.filter(s => s.id !== el.dataset.id); save(); render(); },
 
     // shopping
     "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food & Drink"}, onSubmit: v => { t.shopping.push(Object.assign({id:uid(), gotIt:false}, v)); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
