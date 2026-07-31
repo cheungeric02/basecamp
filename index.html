@@ -497,6 +497,7 @@
     theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
+    infoTab: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
@@ -513,7 +514,7 @@
 
   const NAV = [
     { id: "overview", label: "Overview", icon: I.overview },
-    { id: "weather", label: "Weather", icon: I.weather },
+    { id: "weather", label: "Info", short: "Info", icon: I.infoTab },
     { id: "meals", label: "Meals & Menu", short: "Meals", icon: I.meals },
     { id: "shopping", label: "Shopping", icon: I.shopping },
     { id: "roles", label: "Roles", icon: I.roles },
@@ -1071,14 +1072,6 @@
       html += '<div id="ovWx">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading live conditions…</p>')+'</div>';
     }
     html += '</div>';
-
-    // quick facts
-    html += '<div class="card card-pad"><h3 style="margin-bottom:12px">At a glance</h3><div class="list" style="gap:0">' +
-      glanceRow("Shopping left", shopLeft + " item"+(shopLeft===1?"":"s"), "shopping") +
-      glanceRow("Prep checklist", checkLeft + " to do", "notes") +
-      glanceRow("Shared budget", money(budgetTotal), "budget") +
-      glanceRow("Roles assigned", trip.roles.filter(r=>r.personId).length + " of " + trip.roles.length, "roles") +
-      '</div></div>';
     html += '</div>'; // right col
     html += '</div>'; // grid
 
@@ -1097,9 +1090,32 @@
   /* ---------- Weather ---------- */
   function secWeather(trip) {
     const days = tripDays(trip);
-    let html = pageHead("Weather", "Live conditions now, plus a manual forecast for each day of the trip.", "");
+    let html = pageHead("Info", "Live weather, the location map, and nearest emergency services.", "");
     html += '<div class="card card-pad" id="liveWx" style="margin-bottom:18px">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading current conditions…</p>')+'</div>';
-    if (!days.length) return html + emptyState(I.weather, "Set trip dates first to lay out the forecast days.", "edit-trip", "Set dates");
+
+    // location map + emergency services
+    if (trip.location || (trip.lat && trip.lon)) {
+      const q = (trip.lat && trip.lon) ? (trip.lat + "," + trip.lon) : trip.location;
+      const enc = encodeURIComponent(q);
+      const hosp = encodeURIComponent("hospital near " + q);
+      html += '<div class="section-title"><h3>Location</h3></div>';
+      html += '<div class="card" style="overflow:hidden;margin-bottom:18px">' +
+        '<iframe title="Location map" src="https://maps.google.com/maps?q='+enc+'&z=12&output=embed" style="width:100%;height:300px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
+        '<div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '<span class="row-sub">'+esc(trip.location||"")+(trip.site?' · '+esc(trip.site):"")+'</span>' +
+          '<a class="btn sm" href="https://www.google.com/maps/search/?api=1&query='+enc+'" target="_blank" rel="noopener">Open in Google Maps</a></div></div>';
+
+      html += '<div class="section-title"><h3>Emergency services</h3></div>';
+      html += '<div class="card" style="overflow:hidden;margin-bottom:18px">' +
+        '<div class="card-pad" style="display:flex;align-items:center;gap:12px;background:var(--danger-soft)">' +
+          '<span class="pill danger" style="font-weight:700">Call 911</span>' +
+          '<span class="row-sub" style="color:var(--ink)">In any emergency, call <b>911</b>. Nearest hospitals &amp; urgent care are shown below.</span></div>' +
+        '<iframe title="Nearest hospitals" src="https://maps.google.com/maps?q='+hosp+'&z=10&output=embed" style="width:100%;height:260px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
+        '<div class="card-pad"><a class="btn sm" href="https://www.google.com/maps/search/?api=1&query='+hosp+'" target="_blank" rel="noopener">Find nearest hospital / ER</a></div></div>';
+    }
+
+    if (!days.length) return html + emptyState(I.infoTab, "Set trip dates to lay out the daily forecast.", "edit-trip", "Set dates");
+    html += '<div class="section-title"><h3>Daily forecast</h3></div>';
     html += '<div class="card card-pad" style="margin-bottom:18px;display:flex;gap:10px;align-items:center;background:var(--info-soft);border-color:transparent">' +
       '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Around Aug 7, check a forecast for '+esc(trip.location||"your destination")+' and fill in each day. Click a card to edit.</span></div>';
     html += '<div class="wx-grid">';
