@@ -1229,7 +1229,9 @@
     if (!catNames.length) return html + '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
     catNames.forEach(cat => {
       const items = cats[cat];
-      html += '<div class="day-head"><h4>'+esc(cat)+'</h4><span class="label">'+items.filter(i=>i.gotIt).length+'/'+items.length+'</span></div>';
+      const key = "SHOP:" + cat, isCol = !!collapsedCats[key];
+      html += '<div class="day-head cat-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>'+esc(cat)+'</h4><span class="label">'+items.filter(i=>i.gotIt).length+'/'+items.length+'</span></div>';
+      if (isCol) return;
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
       items.forEach(s => {
         const priced = Number(s.price) > 0;
