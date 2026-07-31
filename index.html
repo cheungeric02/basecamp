@@ -1142,9 +1142,8 @@
       html += '<div class="card" style="overflow:hidden;margin-bottom:18px">' +
         '<div class="card-pad" style="display:flex;align-items:center;gap:12px;background:var(--danger-soft)">' +
           '<span class="pill danger" style="font-weight:700">Call 911</span>' +
-          '<span class="row-sub" style="color:var(--ink)">In any emergency, call <b>911</b>. Nearest hospitals &amp; urgent care are shown below.</span></div>' +
-        '<iframe title="Nearest hospitals" src="https://maps.google.com/maps?q='+hosp+'&z=10&output=embed" style="width:100%;height:260px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>' +
-        '<div class="card-pad"><a class="btn sm" href="https://www.google.com/maps/search/?api=1&query='+hosp+'" target="_blank" rel="noopener">Find nearest hospital / ER</a></div></div>';
+          '<span class="row-sub" style="color:var(--ink)">In any emergency, call <b>911</b>.</span></div>' +
+        '<div class="card-pad"><a class="btn primary" href="https://www.google.com/maps/search/?api=1&query='+hosp+'" target="_blank" rel="noopener" style="justify-content:center;width:100%">Find nearest hospital / ER on Google Maps</a></div></div>';
     }
     return html;
   }
