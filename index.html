@@ -814,6 +814,22 @@
       inner = '<input type="text" '+name+' value="'+esc(val)+'" placeholder="'+esc(f.placeholder||"")+'" list="'+listId+'" autocomplete="off">' +
         '<datalist id="'+listId+'">' + dlopts.map(o => '<option value="'+esc(o)+'"></option>').join("") + '</datalist>';
     }
+    else if (f.type === "mealselect") {
+      const meals = trip.meals || [];
+      const dorder = tripDays(trip).slice();
+      meals.forEach(m => { if (dorder.indexOf(m.day) < 0) dorder.push(m.day || ""); });
+      const types = ["Breakfast","Lunch","Dinner","Snack","Drinks"];
+      let opts = '<option value=""'+(!val?" selected":"")+'>— Not linked to a meal —</option>';
+      dorder.forEach(day => {
+        types.forEach(type => {
+          const gm = meals.filter(m => (m.day||"") === (day||"") && (m.type||"") === type);
+          if (!gm.length) return;
+          opts += '<optgroup label="'+esc((day?fmtDate(day,"dow"):"Unscheduled")+" "+type)+'">' +
+            gm.map(m => '<option value="'+m.id+'"'+(m.id===val?" selected":"")+'>'+esc(m.name||"(unnamed)")+'</option>').join("") + '</optgroup>';
+        });
+      });
+      inner = '<select '+name+'>'+opts+'</select>';
+    }
     else inner = '<input type="'+(f.type||"text")+'" '+name+' value="'+esc(val)+'" placeholder="'+esc(f.placeholder||"")+'"'+(f.type==="number"?' step="0.01"':"")+'>';
     return '<div class="field'+(f.row?" ":"")+'"><label>'+esc(f.label)+(f.required?' <span style="color:var(--danger)">*</span>':"")+'</label>'+inner+(f.hint?'<span class="hint">'+esc(f.hint)+'</span>':"")+'</div>';
   }
@@ -1163,7 +1179,7 @@
   function addMealIngredient(mealId, val) {
     val = (val||"").trim(); if (!val) return;
     const t = activeTrip(); const m = findById(t.meals, mealId); if (!m) return;
-    t.shopping.push({ id: uid(), item: val, category: "Food & Drink", qty: "", forMeal: m.name, mealId: m.id, gotIt: false, assignedIds: [] });
+    t.shopping.push({ id: uid(), item: val, category: foodOrDrink(val), qty: "", forMeal: m.name, mealId: m.id, gotIt: false, assignedIds: [] });
     expandedMeals[mealId] = true;
     save(); logActivity("added ingredient “"+val+"” for “"+m.name+"”"); render(); toast("Added to the shopping list");
   }
@@ -1256,12 +1272,12 @@
     return html;
   }
   function shopFields(trip) {
-    const cats = ["Food & Drink","Camp Supplies","Personal","Cooking Gear","Other"];
+    const cats = ["Food","Drinks","Camp Supplies","Personal","Cooking Gear","Other"];
     return [
       { key:"item", label:"Item", type:"text", required:true, placeholder:"e.g. Charcoal" },
       { key:"qty", label:"Quantity", type:"text", placeholder:"e.g. 2 bags", row:true },
       { key:"category", label:"Category", type:"select", options: cats },
-      { key:"forMeal", label:"For meal (optional)", type:"text", placeholder:"Link to a menu item" },
+      { key:"mealRef", label:"For meal (optional)", type:"mealselect" },
     ];
   }
 
@@ -1668,8 +1684,8 @@
     "del-meal-ing": (el) => { const t = activeTrip(); t.shopping = t.shopping.filter(s => s.id !== el.dataset.id); save(); render(); },
 
     // shopping
-    "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food & Drink"}, onSubmit: v => { t.shopping.push(Object.assign({id:uid(), gotIt:false}, v)); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
-    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); openForm({ title:"Edit item", fields: shopFields(t), values:s, onSubmit: v => { Object.assign(s, v); save(); logActivity("edited shopping item “"+s.item+"”"); render(); } }); },
+    "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food"}, onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); t.shopping.push({ id:uid(), item:v.item, qty:v.qty, category:v.category, mealId:v.mealRef||"", forMeal:m?m.name:"", gotIt:false, assignedIds:[] }); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
+    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); const mealRef = s.mealId || (t.meals.find(m=>m.name===s.forMeal)||{}).id || ""; openForm({ title:"Edit item", fields: shopFields(t), values: Object.assign({}, s, { mealRef: mealRef }), onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); s.item=v.item; s.qty=v.qty; s.category=v.category; s.mealId=v.mealRef||""; s.forMeal=m?m.name:""; save(); logActivity("edited shopping item “"+s.item+"”"); render(); } }); },
     "del-shop": (el) => delItem("shopping", el.dataset.id, "Remove this item?"),
     "toggle-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); s.gotIt = el.checked; save(); logActivity((el.checked?"bought":"un-checked")+" “"+s.item+"”"); render(); if (el.checked && !(Number(s.price) > 0) && activeTrip().people.length) openShopPrice(s); },
     "shop-price": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (s) openShopPrice(s); },
@@ -2091,12 +2107,15 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("overlay").classList.contains("open")) closeModal(); });
 
   /* ---------- Collaboration hooks (used by the Firebase module below) ---------- */
+  function foodOrDrink(name) {
+    return /(water|juice|soda|\bpop\b|cola|beer|wine|coffee|tea|lemonade|gatorade|cider|cocktail|vodka|whisk|\brum\b|seltzer|sparkling|\bmilk\b|drink|\bale\b|smoothie)/i.test(name || "") ? "Drinks" : "Food";
+  }
   function ensureShape(t) {
     ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
     if (typeof t.notes !== "string") t.notes = "";
     if (!t.personalPacking || typeof t.personalPacking !== "object" || Array.isArray(t.personalPacking)) t.personalPacking = {};
     (t.packing || []).forEach(p => { if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; });
-    (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; });
+    (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
   }
   function isEditing() {
     const ov = document.getElementById("overlay");
