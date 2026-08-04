@@ -750,12 +750,15 @@
           '<button class="icon-btn" data-close>'+I.x+'</button></div>' +
         '<form id="modalForm"><div class="modal-body">'+fieldsHtml+'</div>' +
         '<div class="modal-foot">' +
+          (opts.onDelete ? '<button type="button" class="btn danger" data-del style="margin-right:auto">'+I.trash+' Delete</button>' : "") +
           '<button type="button" class="btn ghost" data-close>Cancel</button>' +
           '<button type="submit" class="btn primary">'+esc(opts.submitLabel||"Save")+'</button>' +
         '</div></form>' +
       '</div>';
     overlay.classList.add("open");
     const form = document.getElementById("modalForm");
+    const delBtn = overlay.querySelector("[data-del]");
+    if (delBtn) delBtn.addEventListener("click", () => { closeModal(); if (opts.onDelete) opts.onDelete(); });
     // multiselect chips + toggle chips wiring
     overlay.querySelectorAll("[data-chip]").forEach(ch => {
       ch.addEventListener("click", () => ch.classList.toggle("on"));
@@ -972,8 +975,7 @@
   }
   function rowActions(editAction, delAction, id) {
     return '<div class="row-actions">' +
-      '<button class="icon-btn" data-action="'+editAction+'" data-id="'+id+'" title="Edit">'+I.edit+'</button>' +
-      '<button class="icon-btn" data-action="'+delAction+'" data-id="'+id+'" title="Delete">'+I.trash+'</button></div>';
+      '<button class="icon-btn" data-action="'+editAction+'" data-id="'+id+'" title="Edit">'+I.edit+'</button></div>';
   }
   function personBadge(trip, id) {
     if (!id) return '<span class="pill muted">Unassigned</span>';
@@ -1377,8 +1379,7 @@
           '<input type="checkbox" class="check" '+(p.packed?"checked":"")+' data-action="'+toggleAction+'" data-id="'+p.id+'">' +
           '<div class="row-main"><div class="row-title">'+esc(p.item)+'</div></div>' +
           (showBringing ? assignControl(trip, p, p.personIds, "addbringer-pack", "removebringer-pack", "+ Who's bringing?") : "") +
-          '<div class="row-actions"><button class="icon-btn" data-action="'+editAction+'" data-id="'+p.id+'" title="Edit">'+I.edit+'</button>' +
-          '<button class="icon-btn" data-action="'+delAction+'" data-id="'+p.id+'" title="Delete">'+I.trash+'</button></div></div>';
+          '<div class="row-actions"><button class="icon-btn" data-action="'+editAction+'" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div></div>';
       });
       html += '</div></div>';
     });
@@ -1487,8 +1488,7 @@
       html += '<div class="row-item">' + '<span class="avatar">'+initials(p.name)+'</span>' +
         '<div class="row-main"><div class="row-title">'+esc(p.name)+(g.driver?' <span class="pill info" style="margin-left:6px">Driver</span>':"")+'</div>' +
         '<div class="row-sub">' + (g.departure?'Departs '+esc(g.departure):"") + (g.carpool?(g.departure?' · ':'')+'Carpool: '+esc(g.carpool):"") + (!(g.departure||g.carpool)?'No details yet':"") + '</div></div>' +
-        '<div class="row-actions"><button class="icon-btn" data-action="edit-guest" data-id="'+p.id+'" title="Edit">'+I.edit+'</button>' +
-        '<button class="icon-btn" data-action="del-person" data-id="'+p.id+'" title="Remove person">'+I.trash+'</button></div>' + '</div>';
+        '<div class="row-actions"><button class="icon-btn" data-action="edit-guest" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div>' + '</div>';
     });
     html += '</div></div>';
     // carpool groupings
@@ -1678,7 +1678,7 @@
 
     // meals
     "add-meal": () => { const t = activeTrip(); openForm({ title:"Add meal", fields: mealFields(t), values:{ type:"Dinner", day:(tripDays(t)[0]||"") }, onSubmit: v => { t.meals.push(Object.assign({id:uid()}, v)); save(); logActivity("added meal “"+v.name+"”"); render(); toast("Meal added"); } }); },
-    "edit-meal": (el) => { const t = activeTrip(); const m = findById(t.meals, el.dataset.id); openForm({ title:"Edit meal", fields: mealFields(t), values:m, onSubmit: v => { Object.assign(m, v); t.shopping.forEach(s => { if (s.mealId === m.id) s.forMeal = m.name; }); save(); logActivity("edited meal “"+m.name+"”"); render(); toast("Saved"); } }); },
+    "edit-meal": (el) => { const t = activeTrip(); const m = findById(t.meals, el.dataset.id); openForm({ title:"Edit meal", fields: mealFields(t), values:m, onSubmit: v => { Object.assign(m, v); t.shopping.forEach(s => { if (s.mealId === m.id) s.forMeal = m.name; }); save(); logActivity("edited meal “"+m.name+"”"); render(); toast("Saved"); }, onDelete: () => delItem("meals", m.id, "Delete this meal?") }); },
     "del-meal": (el) => delItem("meals", el.dataset.id, "Delete this meal?"),
     "toggle-meal-ing": (el) => { expandedMeals[el.dataset.id] = !expandedMeals[el.dataset.id]; render(); },
     "add-meal-ing": (el) => { const inp = document.getElementById("ming_"+el.dataset.id); addMealIngredient(el.dataset.id, inp ? inp.value : ""); },
@@ -1686,7 +1686,7 @@
 
     // shopping
     "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food"}, onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); t.shopping.push({ id:uid(), item:v.item, qty:v.qty, category:v.category, mealId:v.mealRef||"", forMeal:m?m.name:"", gotIt:false, assignedIds:[] }); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
-    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); const mealRef = s.mealId || (t.meals.find(m=>m.name===s.forMeal)||{}).id || ""; openForm({ title:"Edit item", fields: shopFields(t), values: Object.assign({}, s, { mealRef: mealRef }), onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); s.item=v.item; s.qty=v.qty; s.category=v.category; s.mealId=v.mealRef||""; s.forMeal=m?m.name:""; save(); logActivity("edited shopping item “"+s.item+"”"); render(); } }); },
+    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); const mealRef = s.mealId || (t.meals.find(m=>m.name===s.forMeal)||{}).id || ""; openForm({ title:"Edit item", fields: shopFields(t), values: Object.assign({}, s, { mealRef: mealRef }), onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); s.item=v.item; s.qty=v.qty; s.category=v.category; s.mealId=v.mealRef||""; s.forMeal=m?m.name:""; save(); logActivity("edited shopping item “"+s.item+"”"); render(); }, onDelete: () => delItem("shopping", s.id, "Remove this item?") }); },
     "del-shop": (el) => delItem("shopping", el.dataset.id, "Remove this item?"),
     "toggle-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); s.gotIt = el.checked; save(); logActivity((el.checked?"bought":"un-checked")+" “"+s.item+"”"); render(); if (el.checked && !(Number(s.price) > 0) && activeTrip().people.length) openShopPrice(s); },
     "shop-price": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (s) openShopPrice(s); },
@@ -1706,23 +1706,23 @@
 
     // roles
     "add-role": () => { const t = activeTrip(); openForm({ title:"Add role", fields: roleFields(), onSubmit: v => { t.roles.push(Object.assign({id:uid()}, v)); save(); logActivity("added role “"+v.title+"”"); render(); toast("Role added"); } }); },
-    "edit-role": (el) => { const t = activeTrip(); const r = findById(t.roles, el.dataset.id); openForm({ title:"Edit role", fields: roleFields(), values:r, onSubmit: v => { Object.assign(r, v); save(); logActivity("edited role “"+r.title+"”"); render(); } }); },
+    "edit-role": (el) => { const t = activeTrip(); const r = findById(t.roles, el.dataset.id); openForm({ title:"Edit role", fields: roleFields(), values:r, onSubmit: v => { Object.assign(r, v); save(); logActivity("edited role “"+r.title+"”"); render(); }, onDelete: () => delItem("roles", r.id, "Delete this role?") }); },
     "del-role": (el) => delItem("roles", el.dataset.id, "Delete this role?"),
 
     // schedule
     "add-sched": () => { const t = activeTrip(); openForm({ title:"Add schedule item", fields: schedFields(t), values:{ day:(tripDays(t)[0]||"") }, onSubmit: v => { t.schedule.push(Object.assign({id:uid()}, v)); save(); logActivity("added to the schedule: “"+v.activity+"”"); render(); toast("Added"); } }); },
-    "edit-sched": (el) => { const t = activeTrip(); const s = findById(t.schedule, el.dataset.id); openForm({ title:"Edit schedule item", fields: schedFields(t), values:s, onSubmit: v => { Object.assign(s, v); save(); logActivity("edited schedule item “"+s.activity+"”"); render(); } }); },
+    "edit-sched": (el) => { const t = activeTrip(); const s = findById(t.schedule, el.dataset.id); openForm({ title:"Edit schedule item", fields: schedFields(t), values:s, onSubmit: v => { Object.assign(s, v); save(); logActivity("edited schedule item “"+s.activity+"”"); render(); }, onDelete: () => delItem("schedule", s.id, "Delete this item?") }); },
     "del-sched": (el) => delItem("schedule", el.dataset.id, "Delete this item?"),
 
     // packing
     "add-pack": () => { const t = activeTrip(); openForm({ title:"Add packing item", fields: packFields(), values:{category:"Shelter & Sleep"}, onSubmit: v => { t.packing.push(Object.assign({id:uid(), packed:false}, v)); save(); logActivity("added packing item “"+v.item+"”"); render(); toast("Added"); } }); },
-    "edit-pack": (el) => { const t = activeTrip(); const p = findById(t.packing, el.dataset.id); openForm({ title:"Edit packing item", fields: packFields(), values:p, onSubmit: v => { Object.assign(p, v); save(); logActivity("edited packing item “"+p.item+"”"); render(); } }); },
+    "edit-pack": (el) => { const t = activeTrip(); const p = findById(t.packing, el.dataset.id); openForm({ title:"Edit packing item", fields: packFields(), values:p, onSubmit: v => { Object.assign(p, v); save(); logActivity("edited packing item “"+p.item+"”"); render(); }, onDelete: () => delItem("packing", p.id, "Remove this item?") }); },
     "del-pack": (el) => delItem("packing", el.dataset.id, "Remove this item?"),
     "toggle-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); p.packed = el.checked; save(); logActivity((el.checked?"packed":"unpacked")+" “"+p.item+"”"); render(); },
 
     // personal packing (per logged-in person)
     "add-mypack": () => { const t = activeTrip(); if (!whoAmI()) { ensureIdentity(true); return; } openForm({ title:"Add to your personal list", fields:[{key:"item",label:"Item",type:"text",required:true,placeholder:"e.g. Toothbrush"},{key:"category",label:"Category",type:"select",options:PERSONAL_CATS}], values:{category:"Clothing"}, onSubmit: v => { myPersonalList(t).push({id:uid(), item:v.item, category:v.category, packed:false}); save(); logActivity("added personal item “"+v.item+"”"); render(); toast("Added to your list"); } }); },
-    "edit-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (!p) return; openForm({ title:"Edit personal item", fields:[{key:"item",label:"Item",type:"text",required:true},{key:"category",label:"Category",type:"select",options:PERSONAL_CATS}], values:p, onSubmit: v => { p.item=v.item; p.category=v.category; save(); render(); } }); },
+    "edit-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (!p) return; openForm({ title:"Edit personal item", fields:[{key:"item",label:"Item",type:"text",required:true},{key:"category",label:"Category",type:"select",options:PERSONAL_CATS}], values:p, onSubmit: v => { p.item=v.item; p.category=v.category; save(); render(); }, onDelete: () => ACTIONS["del-mypack"]({dataset:{id:p.id}}) }); },
     "del-mypack": (el) => { const t = activeTrip(); const who = whoAmI(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); confirmDialog("Remove item", "Remove “"+(p?p.item:"item")+"” from your personal list?", () => { t.personalPacking[who] = list.filter(x=>x.id!==el.dataset.id); save(); render(); toast("Removed"); }); },
     "toggle-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (p) { p.packed = el.checked; save(); render(); } },
     "seed-mypack": () => { const t = activeTrip(); if (!whoAmI()) { ensureIdentity(true); return; } const list = myPersonalList(t); personalStarter().forEach(it => list.push(it)); save(); logActivity("started a personal packing list"); render(); toast("Starter list added"); },
@@ -1731,7 +1731,7 @@
     // guests / people
     "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
     "edit-guest": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); let g = t.guests.find(x=>x.personId===pid); if(!g){ g = {id:uid(), personId:pid, rsvp:"", departure:"", carpool:"", driver:false}; t.guests.push(g); }
-      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true}].concat(guestFields()), values:Object.assign({name:person.name}, g), onSubmit: v => { person.name = v.name; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); } }); },
+      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true}].concat(guestFields()), values:Object.assign({name:person.name}, g), onSubmit: v => { person.name = v.name; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
     "del-person": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); confirmDialog("Remove "+person.name+"?", "This removes them from the crew and unassigns them from roles, meals and packing.", () => {
         t.people = t.people.filter(p=>p.id!==pid); t.guests = t.guests.filter(g=>g.personId!==pid);
         t.roles.forEach(r=>{ if(r.personId===pid) r.personId=""; }); t.meals.forEach(m=>{ if(m.personId===pid) m.personId=""; }); t.packing.forEach(p=>{ if(p.personId===pid) p.personId=""; });
@@ -1740,7 +1740,7 @@
 
     // budget
     "add-expense": () => { const t = activeTrip(); if(!t.people.length){toast("Add people first");return;} openForm({ title:"Add expense", fields: expenseFields(t), values:{ paidBy:(t.people[0]||{}).id, splitAmong:t.people.map(p=>p.id) }, onSubmit: v => { t.budget.push({id:uid(), description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("added expense “"+v.description+"” ("+money(Number(v.amount)||0)+")"); render(); toast("Expense added"); } }); },
-    "edit-expense": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); openForm({ title:"Edit expense", fields: expenseFields(t), values:e, onSubmit: v => { Object.assign(e, {description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("edited expense “"+e.description+"”"); render(); } }); },
+    "edit-expense": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); openForm({ title:"Edit expense", fields: expenseFields(t), values:e, onSubmit: v => { Object.assign(e, {description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("edited expense “"+e.description+"”"); render(); }, onDelete: () => delItem("budget", e.id, "Delete this expense?") }); },
     "del-expense": (el) => delItem("budget", el.dataset.id, "Delete this expense?"),
 
     // checklist
