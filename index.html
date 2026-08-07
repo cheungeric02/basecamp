@@ -253,6 +253,7 @@
   .ming-panel { margin: 2px 0 10px; padding: 12px 14px; background: var(--surface-2); border-radius: 16px; }
   .ming-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
   .ming-input { flex: 1; padding: 9px 14px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; }
+  .ming-qty { width: 80px; flex: none; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; }
   .bringer.done-ing { opacity: .6; text-decoration: line-through; }
 
   .day-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
@@ -999,6 +1000,7 @@
     if (ui.section === "notes") wireNotes(trip);
     if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
+    if (ui.section === "packing") loadPackingWx();
     if (ui.section === "tracker") startActivityWatch();
   }
 
@@ -1073,6 +1075,8 @@
       mealTile +
     '</div>';
 
+    html += myJobsCard(trip);
+
     html += '<div class="grid cols-2">';
 
     // schedule card
@@ -1107,6 +1111,49 @@
   function statTile(label, val, sub, tone, pct) {
     return '<div class="card stat'+(tone?" tone-"+tone:"")+'"><div class="label">'+esc(label)+'</div><div class="val" style="'+(tone==="ember"?"color:var(--ember)":"")+'">'+val+'</div>' +
       (pct!=null?'<div class="progress" style="margin-top:10px"><span style="width:'+pct+'%"></span></div>':'<div class="sub">'+esc(sub)+'</div>') + '</div>';
+  }
+  function myJobsCard(trip) {
+    const who = whoAmI();
+    if (!who) {
+      return '<div class="card card-pad section-block" style="display:flex;align-items:center;gap:14px;background:var(--accent-soft)">' +
+        '<span class="avatar" style="width:40px;height:40px">?</span>' +
+        '<div style="flex:1;min-width:0"><div class="row-title">See what you\'re on the hook for</div>' +
+        '<div class="row-sub">Pick who you are — your roles, items to buy and gear to bring show up here.</div></div>' +
+        '<button class="btn primary sm" data-action="change-who">Choose your name</button></div>';
+    }
+    const mid = myPersonId(trip);
+    const roles = mid ? trip.roles.filter(r => r.personId === mid) : [];
+    const shop = mid ? trip.shopping.filter(s => !s.gotIt && (s.assignedIds||[]).indexOf(mid) >= 0) : [];
+    const gear = mid ? trip.packing.filter(p => !p.packed && (p.personIds||[]).indexOf(mid) >= 0) : [];
+    const mine = myPersonalList(trip) || [];
+    const personalLeft = mine.filter(x => !x.packed).length;
+    const g = mid ? trip.guests.find(x => x.personId === mid) : null;
+    const driving = !!(g && g.driver);
+    const total = roles.length + shop.length + gear.length + personalLeft;
+
+    const jobRow = (icon, label, sample, pillTxt, tone, section) =>
+      '<button class="row-item" data-action="nav" data-section="'+section+'" style="width:100%;text-align:left;background:none;border-left:none;border-right:none;border-top:none;cursor:pointer">' +
+        '<span style="color:var(--accent);display:inline-flex;width:20px;flex:none">'+icon+'</span>' +
+        '<span class="row-main"><span class="row-title" style="font-weight:500">'+esc(label)+'</span>'+(sample?'<span class="row-sub">'+esc(sample)+'</span>':"")+'</span>' +
+        '<span class="pill '+tone+'">'+esc(pillTxt)+'</span></button>';
+    const preview = (arr, field) => { const names = arr.map(x=>x[field]); const head = names.slice(0,3).join(", "); return head + (names.length>3?" +"+(names.length-3)+" more":""); };
+
+    let body = "";
+    if (roles.length) body += jobRow(I.roles, roles.length===1?"1 role":roles.length+" roles", preview(roles,"title"), String(roles.length), "info", "roles");
+    if (shop.length)  body += jobRow(I.shopping, shop.length+" thing"+(shop.length===1?"":"s")+" to buy", preview(shop,"item"), String(shop.length), "ember", "shopping");
+    if (gear.length)  body += jobRow(I.packing, gear.length+" group item"+(gear.length===1?"":"s")+" to bring", preview(gear,"item"), String(gear.length), "ember", "packing");
+    if (personalLeft) body += jobRow(I.packing, personalLeft+" personal item"+(personalLeft===1?"":"s")+" to pack", "Your own bag", String(personalLeft), "accent", "packing");
+    if (driving)      body += jobRow(I.guests, "You're driving", (g.carpool?("Carpool: "+g.carpool):"")+((Number(g.seats)>0)?((g.carpool?" · ":"")+g.seats+" spare seats"):""), "🚗", "info", "guests");
+
+    let card = '<div class="section-block"><div class="section-title"><h3>Your jobs · '+esc(who)+'</h3>' +
+      '<span class="label">'+((total||driving)?(total+" to do"):"all clear")+'</span></div>';
+    if (!total && !driving) {
+      card += '<div class="card card-pad" style="display:flex;align-items:center;gap:12px;background:var(--accent-soft)"><span style="font-size:1.5rem">🎉</span>' +
+        '<div><div class="row-title">You\'re all caught up</div><div class="row-sub">Nothing assigned to you right now.</div></div></div>';
+    } else {
+      card += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">'+body+'</div></div>';
+    }
+    return card + '</div>';
   }
   function glanceRow(label, val, section) {
     return '<button class="row-item" data-action="nav" data-section="'+section+'" style="width:100%;background:none;border-left:none;border-right:none;border-top:none;text-align:left;cursor:pointer">' +
@@ -1179,16 +1226,20 @@
   const MEAL_ORDER = { "Breakfast":0, "Lunch":1, "Dinner":2, "Snack":3, "Drinks":4 };
   const MEAL_TONE = { "Breakfast":"warn", "Lunch":"info", "Dinner":"green", "Snack":"ember", "Drinks":"info" };
   function mealIngredients(trip, m) { return (trip.shopping || []).filter(s => s.mealId === m.id); }
-  function addMealIngredient(mealId, val) {
+  function addMealIngredient(mealId, val, qty) {
     val = (val||"").trim(); if (!val) return;
+    qty = (qty||"").trim();
     const t = activeTrip(); const m = findById(t.meals, mealId); if (!m) return;
-    t.shopping.push({ id: uid(), item: val, category: foodOrDrink(val), qty: "", forMeal: m.name, mealId: m.id, gotIt: false, assignedIds: [] });
+    t.shopping.push({ id: uid(), item: val, category: foodOrDrink(val), qty: qty, forMeal: m.name, mealId: m.id, gotIt: false, assignedIds: [] });
     expandedMeals[mealId] = true;
-    save(); logActivity("added ingredient “"+val+"” for “"+m.name+"”"); render(); toast("Added to the shopping list");
+    save(); logActivity("added ingredient “"+val+"”"+(qty?" (×"+qty+")":"")+" for “"+m.name+"”"); render(); toast("Added to the shopping list");
   }
   function wireMeals() {
     document.querySelectorAll(".ming-input").forEach(inp => {
-      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addMealIngredient(inp.dataset.id, inp.value); } });
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); const q = document.getElementById("mingq_"+inp.dataset.id); addMealIngredient(inp.dataset.id, inp.value, q?q.value:""); } });
+    });
+    document.querySelectorAll(".ming-qty").forEach(inp => {
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); const it = document.getElementById("ming_"+inp.dataset.id); addMealIngredient(inp.dataset.id, it?it.value:"", inp.value); } });
     });
   }
   function secMeals(trip) {
@@ -1214,9 +1265,9 @@
         if (exp) {
           html += '<div class="ming-panel">' +
             (ings.length
-              ? '<div class="ming-list">' + ings.map(s => '<span class="bringer'+(s.gotIt?" done-ing":"")+'">'+esc(s.item)+'<button class="bx" data-action="del-meal-ing" data-id="'+s.id+'" title="Remove">×</button></span>').join("") + '</div>'
+              ? '<div class="ming-list">' + ings.map(s => '<span class="bringer'+(s.gotIt?" done-ing":"")+'">'+esc(s.item)+(s.qty?' <span style="opacity:.65;font-weight:500">×'+esc(s.qty)+'</span>':"")+'<button class="bx" data-action="del-meal-ing" data-id="'+s.id+'" title="Remove">×</button></span>').join("") + '</div>'
               : '<div class="row-sub" style="margin-bottom:10px">No ingredients yet — add them here and they\'ll appear on the Shopping list, linked to this meal.</div>') +
-            '<div style="display:flex;gap:8px"><input type="text" class="ming-input" id="ming_'+m.id+'" data-id="'+m.id+'" placeholder="Add an ingredient…"><button class="btn primary sm" data-action="add-meal-ing" data-id="'+m.id+'">'+I.plus+' Add</button></div>' +
+            '<div style="display:flex;gap:8px"><input type="text" class="ming-input" id="ming_'+m.id+'" data-id="'+m.id+'" placeholder="Add an ingredient…"><input type="text" class="ming-qty" id="mingq_'+m.id+'" data-id="'+m.id+'" placeholder="Qty" aria-label="Quantity"><button class="btn primary sm" data-action="add-meal-ing" data-id="'+m.id+'">'+I.plus+' Add</button></div>' +
           '</div>';
         }
       });
@@ -1407,6 +1458,7 @@
   }
   function secPacking(trip) {
     let html = pageHead("Packing", "Your personal bag, plus the shared group gear.", "");
+    html += '<div id="packWxNudge"></div>';
     const who = whoAmI();
 
     // ----- Personal (big collapsible) -----
@@ -1484,10 +1536,15 @@
     if (!trip.people.length) return html + emptyState(I.guests, "No one added yet. Add the crew.", "add-person", "Add person");
     html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
     trip.people.forEach(p => {
-      const g = trip.guests.find(x => x.personId === p.id) || { personId: p.id, departure:"", carpool:"", driver:false };
+      const g = trip.guests.find(x => x.personId === p.id) || { personId: p.id, departure:"", carpool:"", driver:false, seats:"", meetPoint:"" };
+      const bits = [];
+      if (g.departure) bits.push('Departs '+esc(g.departure));
+      if (g.meetPoint) bits.push('From '+esc(g.meetPoint));
+      if (g.carpool) bits.push('Carpool: '+esc(g.carpool));
+      if (g.driver && Number(g.seats) > 0) bits.push(esc(g.seats)+' spare seat'+(Number(g.seats)===1?'':'s'));
       html += '<div class="row-item">' + '<span class="avatar">'+initials(p.name)+'</span>' +
         '<div class="row-main"><div class="row-title">'+esc(p.name)+(g.driver?' <span class="pill info" style="margin-left:6px">Driver</span>':"")+'</div>' +
-        '<div class="row-sub">' + (g.departure?'Departs '+esc(g.departure):"") + (g.carpool?(g.departure?' · ':'')+'Carpool: '+esc(g.carpool):"") + (!(g.departure||g.carpool)?'No details yet':"") + '</div></div>' +
+        '<div class="row-sub">' + (bits.length?bits.join(' · '):'No details yet') + '</div></div>' +
         '<div class="row-actions"><button class="icon-btn" data-action="edit-guest" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div>' + '</div>';
     });
     html += '</div></div>';
@@ -1497,8 +1554,20 @@
     if (Object.keys(groups).length) {
       html += '<div class="day-head"><h4>Carpool groups</h4></div><div class="grid cols-2">';
       Object.keys(groups).forEach(k => {
-        html += '<div class="card card-pad"><div class="label" style="margin-bottom:8px">'+esc(k)+'</div>' +
-          groups[k].map(({p,g}) => '<div style="display:flex;align-items:center;gap:9px;padding:4px 0"><span class="avatar">'+initials(p.name)+'</span><span>'+esc(p.name)+'</span>'+(g.driver?'<span class="pill info" style="margin-left:auto">Driving</span>':"")+'</div>').join("") +
+        const members = groups[k];
+        const seatsOffered = members.reduce((s,m)=>s+((m.g&&m.g.driver)?(Number(m.g.seats)||0):0),0);
+        const riders = members.filter(m=>!(m.g&&m.g.driver)).length;
+        const meet = (members.find(m=>m.g&&m.g.meetPoint)||{}).g;
+        let cap = "";
+        if (seatsOffered > 0) {
+          const over = riders > seatsOffered;
+          cap = '<span class="pill '+(over?"danger":"green")+'" style="margin-left:auto">'+riders+' / '+seatsOffered+' seat'+(seatsOffered===1?"":"s")+(over?" · over!":"")+'</span>';
+        } else if (riders && !members.some(m=>m.g&&m.g.driver)) {
+          cap = '<span class="pill warn" style="margin-left:auto">no driver yet</span>';
+        }
+        html += '<div class="card card-pad"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="label">'+esc(k)+'</span>'+cap+'</div>' +
+          (meet&&meet.meetPoint?'<div class="row-sub" style="margin-bottom:8px">Meet: '+esc(meet.meetPoint)+(meet.departure?' · '+esc(meet.departure):"")+'</div>':"") +
+          members.map(({p,g}) => '<div style="display:flex;align-items:center;gap:9px;padding:4px 0"><span class="avatar">'+initials(p.name)+'</span><span>'+esc(p.name)+'</span>'+((g&&g.driver)?'<span class="pill info" style="margin-left:auto">Driving'+(Number(g.seats)>0?' · '+esc(g.seats)+' seats':'')+'</span>':"")+'</div>').join("") +
           '</div>';
       });
       html += '</div>';
@@ -1507,9 +1576,11 @@
   }
   function guestFields() {
     return [
-      { key:"departure", label:"Departure time", type:"text", placeholder:"e.g. Sun 1 PM" },
-      { key:"carpool", label:"Carpool group", type:"datalist", options: (t) => Array.from(new Set((t.guests||[]).map(g=>g.carpool).filter(Boolean))), placeholder:"Pick an existing group or type a new one" },
       { key:"driver", label:"Driver", type:"checkbox", checkLabel:"This person is driving" },
+      { key:"seats", label:"Spare seats (if driving)", type:"number", placeholder:"e.g. 3", hint:"How many others they can take." },
+      { key:"departure", label:"Departure time", type:"text", placeholder:"e.g. Fri 3 PM" },
+      { key:"meetPoint", label:"Leaving from / meeting point", type:"text", placeholder:"e.g. Yonge & Eglinton" },
+      { key:"carpool", label:"Carpool group", type:"datalist", options: (t) => Array.from(new Set((t.guests||[]).map(g=>g.carpool).filter(Boolean))), placeholder:"Pick an existing group or type a new one" },
     ];
   }
 
@@ -1681,7 +1752,7 @@
     "edit-meal": (el) => { const t = activeTrip(); const m = findById(t.meals, el.dataset.id); openForm({ title:"Edit meal", fields: mealFields(t), values:m, onSubmit: v => { Object.assign(m, v); t.shopping.forEach(s => { if (s.mealId === m.id) s.forMeal = m.name; }); save(); logActivity("edited meal “"+m.name+"”"); render(); toast("Saved"); }, onDelete: () => delItem("meals", m.id, "Delete this meal?") }); },
     "del-meal": (el) => delItem("meals", el.dataset.id, "Delete this meal?"),
     "toggle-meal-ing": (el) => { expandedMeals[el.dataset.id] = !expandedMeals[el.dataset.id]; render(); },
-    "add-meal-ing": (el) => { const inp = document.getElementById("ming_"+el.dataset.id); addMealIngredient(el.dataset.id, inp ? inp.value : ""); },
+    "add-meal-ing": (el) => { const inp = document.getElementById("ming_"+el.dataset.id); const q = document.getElementById("mingq_"+el.dataset.id); addMealIngredient(el.dataset.id, inp ? inp.value : "", q ? q.value : ""); },
     "del-meal-ing": (el) => { const t = activeTrip(); t.shopping = t.shopping.filter(s => s.id !== el.dataset.id); save(); render(); },
 
     // shopping
@@ -1730,8 +1801,8 @@
 
     // guests / people
     "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
-    "edit-guest": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); let g = t.guests.find(x=>x.personId===pid); if(!g){ g = {id:uid(), personId:pid, rsvp:"", departure:"", carpool:"", driver:false}; t.guests.push(g); }
-      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true}].concat(guestFields()), values:Object.assign({name:person.name}, g), onSubmit: v => { person.name = v.name; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
+    "edit-guest": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); let g = t.guests.find(x=>x.personId===pid); if(!g){ g = {id:uid(), personId:pid, rsvp:"", departure:"", carpool:"", driver:false, seats:"", meetPoint:""}; t.guests.push(g); }
+      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true}].concat(guestFields()), values:Object.assign({name:person.name}, g), onSubmit: v => { person.name = v.name; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; g.seats=v.seats; g.meetPoint=v.meetPoint; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
     "del-person": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); confirmDialog("Remove "+person.name+"?", "This removes them from the crew and unassigns them from roles, meals and packing.", () => {
         t.people = t.people.filter(p=>p.id!==pid); t.guests = t.guests.filter(g=>g.personId!==pid);
         t.roles.forEach(r=>{ if(r.personId===pid) r.personId=""; }); t.meals.forEach(m=>{ if(m.personId===pid) m.personId=""; }); t.packing.forEach(p=>{ if(p.personId===pid) p.personId=""; });
@@ -1860,6 +1931,79 @@
     } catch (e) {
       setBox(liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Couldn\'t reach the weather service. <button class="btn sm" data-action="refresh-wx">Retry</button></p>'));
     }
+  }
+
+  /* ===== Weather-aware packing nudge ===== */
+  let packWxCache = null, packWxKey = "";
+  async function loadPackingWx(force) {
+    const box = document.getElementById("packWxNudge");
+    if (!box) return;
+    const t = activeTrip();
+    const days = tripDays(t);
+    if (!days.length) { box.innerHTML = ""; return; }
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    let daily = null;
+    if (lat && lon) {
+      const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
+      if (packWxCache && packWxKey === key && !force) daily = packWxCache;
+      else {
+        try {
+          const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date="+days[0]+"&end_date="+days[days.length-1]+"&latitude="+lat+"&longitude="+lon);
+          const j = await r.json();
+          if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; packWxCache = daily; packWxKey = key; }
+        } catch (e) {}
+      }
+    }
+    const nudges = packWxNudges(t, days, daily);
+    box.innerHTML = nudges.length ? renderPackNudges(nudges) : "";
+  }
+  function packWxNudges(trip, days, daily) {
+    const out = [];
+    let minLow = Infinity, maxHigh = -Infinity, rainDays = [], stormDays = [], gotData = false, live = false;
+    if (daily && daily.time && daily.time.length) {
+      daily.time.forEach((d, i) => {
+        gotData = true; live = true;
+        const hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null;
+        const lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
+        const pp = daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null;
+        const code = daily.weather_code ? daily.weather_code[i] : null;
+        if (lo != null && lo < minLow) minLow = lo;
+        if (hi != null && hi > maxHigh) maxHigh = hi;
+        const info = code != null ? wmoInfo(code) : null;
+        if (info && info.icon === "storm") stormDays.push(d);
+        else if ((info && (info.icon === "rain" || info.icon === "snow")) || (pp != null && pp >= 40)) rainDays.push(d);
+      });
+    } else {
+      (trip.weather||[]).forEach(w => {
+        if (days.indexOf(w.date) < 0) return;
+        gotData = true;
+        const hi = parseFloat(w.high), lo = parseFloat(w.low);
+        if (!isNaN(lo) && lo < minLow) minLow = lo;
+        if (!isNaN(hi) && hi > maxHigh) maxHigh = hi;
+        const c = (w.condition||"").toLowerCase();
+        if (c.indexOf("thunder")>=0 || c.indexOf("storm")>=0) stormDays.push(w.date);
+        else if (c.indexOf("rain")>=0 || c.indexOf("snow")>=0 || c.indexOf("drizzle")>=0) rainDays.push(w.date);
+      });
+    }
+    if (!gotData) return out;
+    const dl = arr => arr.map(d=>fmtDate(d,"dow")).join(", ");
+    if (stormDays.length) out.push({ tone:"danger", title:"Thunderstorms possible ("+dl(stormDays)+")", tip:"Sturdy tarp, extra guy-lines & stakes, rain jackets, dry bags for electronics — and a bad-weather plan." });
+    if (rainDays.length) out.push({ tone:"info", title:"Rain likely ("+dl(rainDays)+")", tip:"Tarp, rain jackets, dry bags, quick-dry clothes and a bag liner for wet gear." });
+    if (minLow !== Infinity && minLow <= 10) out.push({ tone:"info", title:"Cold nights — down to "+Math.round(minLow)+"°", tip:"Warm layers, a beanie, extra socks and a warmer sleeping bag or liner." });
+    if (maxHigh !== -Infinity && maxHigh >= 29) out.push({ tone:"warn", title:"Hot days — up to "+Math.round(maxHigh)+"°", tip:"Extra water, sunscreen, a hat and light, breathable clothing." });
+    if (out.length) out.push({ tone:"meta", live:live });
+    return out;
+  }
+  function renderPackNudges(nudges) {
+    const cards = nudges.filter(n => n.tone !== "meta").map(n =>
+      '<div class="card card-pad" style="display:flex;gap:12px;align-items:flex-start;background:var(--'+n.tone+'-soft);border:none">' +
+        '<span class="pill '+n.tone+'" style="flex:none">Weather</span>' +
+        '<div style="min-width:0"><div class="row-title">'+esc(n.title)+'</div><div class="row-sub" style="color:var(--ink)">'+esc(n.tip)+'</div></div>' +
+      '</div>').join("");
+    const meta = nudges.find(n => n.tone === "meta");
+    const foot = meta ? '<div class="label" style="text-transform:none;letter-spacing:0;margin:2px 2px 0">'+(meta.live?"Based on the live forecast for your trip dates.":"Based on the forecast you\'ve entered on the Info tab.")+'</div>' : "";
+    return '<div class="section-block" style="display:flex;flex-direction:column;gap:10px">'+cards+foot+'</div>';
   }
 
   /* ================= IDENTITY (who is editing) ================= */
