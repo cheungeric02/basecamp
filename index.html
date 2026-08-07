@@ -267,6 +267,36 @@
   .wx .lo { color: var(--muted); font-size: 1.1rem; }
   .wx .cond { font-size: .9rem; }
 
+  /* ---- Animated weather icons ---- */
+  .wx-ic { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .wx-ic svg { overflow: visible; }
+  .wxa-rays, .wxa-sun, .wxa-cloud, .wxa-drop, .wxa-drop2, .wxa-drop3,
+  .wxa-flake, .wxa-flake2, .wxa-flake3, .wxa-bolt, .wxa-fog, .wxa-fog2, .wxa-fog3,
+  .wxa-twinkle, .wxa-twinkle2 { transform-box: fill-box; transform-origin: center; }
+  .wxa-rays { animation: wxSpin 16s linear infinite; }
+  .wxa-sun { animation: wxPulse 3.5s ease-in-out infinite; }
+  .wxa-cloud { animation: wxBob 4.5s ease-in-out infinite; }
+  .wxa-drop, .wxa-drop2, .wxa-drop3 { animation: wxDrop 1.4s linear infinite; }
+  .wxa-drop2 { animation-delay: .45s; }
+  .wxa-drop3 { animation-delay: .9s; }
+  .wxa-flake, .wxa-flake2, .wxa-flake3 { animation: wxFlake 2.6s linear infinite; }
+  .wxa-flake2 { animation-delay: .6s; }
+  .wxa-flake3 { animation-delay: 1.2s; }
+  .wxa-bolt { animation: wxFlash 2.6s steps(1, end) infinite; }
+  .wxa-fog, .wxa-fog2, .wxa-fog3 { animation: wxFog 3.2s ease-in-out infinite; }
+  .wxa-fog2 { animation-delay: .3s; }
+  .wxa-fog3 { animation-delay: .6s; }
+  .wxa-twinkle, .wxa-twinkle2 { animation: wxTwinkle 2.4s ease-in-out infinite; }
+  .wxa-twinkle2 { animation-delay: 1.1s; }
+  @keyframes wxSpin { to { transform: rotate(360deg); } }
+  @keyframes wxPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  @keyframes wxBob { 0%,100% { transform: translateY(-1px); } 50% { transform: translateY(1.5px); } }
+  @keyframes wxDrop { 0% { transform: translateY(-3px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: .85; } 100% { transform: translateY(9px); opacity: 0; } }
+  @keyframes wxFlake { 0% { transform: translateY(-2px) translateX(0); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(10px) translateX(2px); opacity: 0; } }
+  @keyframes wxFlash { 0%,55%,100% { opacity: .15; } 60%,70% { opacity: 1; } 65% { opacity: .35; } }
+  @keyframes wxFog { 0%,100% { transform: translateX(-2.5px); } 50% { transform: translateX(2.5px); } }
+  @keyframes wxTwinkle { 0%,100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1); } }
+
   /* schedule timeline */
   .timeline { position: relative; padding-left: 22px; }
   .timeline::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
@@ -1112,7 +1142,8 @@
     html += '<div class="card card-pad"><div class="section-title"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>';
     const hasForecast = wx && (wx.high || wx.low || wx.condition);
     if (hasForecast) {
-      html += '<div style="display:flex;align-items:baseline;gap:10px;margin-top:6px">' +
+      html += '<div style="display:flex;align-items:center;gap:12px;margin-top:6px">' +
+        wxIcon(condIcon(wx.condition), 48) +
         '<span class="wx-hi" style="font-family:var(--font-display);font-size:2.2rem">'+esc(wx.high||"—")+'°</span>' +
         '<span style="color:var(--muted)">/ '+esc(wx.low||"—")+'°</span>' +
         '<span style="margin-left:auto" class="pill info">'+esc(wx.condition||"—")+'</span></div>' +
@@ -1201,8 +1232,7 @@
           '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
           '<div class="wx-body" id="infowx_'+esc(d)+'">' +
           (filled ?
-            '<div class="temps"><span class="hi">'+esc(w.high||"—")+'°</span><span class="lo">/ '+esc(w.low||"—")+'°</span></div>' +
-            '<div class="cond"><span class="pill info">'+esc(w.condition||"—")+'</span></div>' +
+            wxBody(condIcon(w.condition), esc(w.high||"—"), esc(w.low||"—"), esc(w.condition||"—")) +
             (w.precip?'<div class="row-sub" style="margin-top:8px">Precip: '+esc(w.precip)+'</div>':"") +
             (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"") +
             '<div class="row-sub" style="color:var(--muted)">Your note · tap to edit</div>'
@@ -1502,9 +1532,8 @@
     need.forEach(b => {
       const w = map[b.id.replace("infowx_","")];
       if (!w || w.hi == null) { b.innerHTML = '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Forecast not out yet · tap to add</div>'; return; }
-      const info = w.code != null ? wmoInfo(w.code) : { label: "—" };
-      b.innerHTML = '<div class="temps"><span class="hi">'+Math.round(w.hi)+'°</span><span class="lo">/ '+Math.round(w.lo)+'°</span></div>' +
-        '<div class="cond"><span class="pill info">'+esc(info.label)+'</span></div>' +
+      const info = w.code != null ? wmoInfo(w.code) : { label: "—", icon: "cloud" };
+      b.innerHTML = wxBody(info.icon || "cloud", Math.round(w.hi), Math.round(w.lo), esc(info.label)) +
         (w.pp != null ? '<div class="row-sub" style="margin-top:8px">Precip: '+w.pp+'%</div>' : "") +
         '<div class="row-sub" style="color:var(--accent)">● Live · tap to override</div>';
     });
@@ -2104,12 +2133,53 @@
   function wmoInfo(code) {
     const c = Number(code);
     const table = [
-      [[0,1], "Clear sky", "sun"], [[2], "Partly cloudy", "cloud"], [[3], "Overcast", "cloud"],
+      [[0,1], "Clear sky", "sun"], [[2], "Partly cloudy", "partly"], [[3], "Overcast", "cloud"],
       [[45,48], "Fog", "fog"], [[51,53,55,56,57], "Drizzle", "rain"], [[61,63,65,66,67,80,81,82], "Rain", "rain"],
       [[71,73,75,77,85,86], "Snow", "snow"], [[95,96,99], "Thunderstorm", "storm"]
     ];
     for (let i=0;i<table.length;i++) if (table[i][0].indexOf(c)>=0) return { label: table[i][1], icon: table[i][2] };
     return { label: "—", icon: "cloud" };
+  }
+  // Map a free-text condition (manual forecast) to an animated-icon kind.
+  function condIcon(text) {
+    const c = (text||"").toLowerCase();
+    if (/thunder|storm|lightning/.test(c)) return "storm";
+    if (/snow|flurr|sleet|blizzard/.test(c)) return "snow";
+    if (/rain|drizzle|shower/.test(c)) return "rain";
+    if (/fog|mist|haze/.test(c)) return "fog";
+    if (/partly|part |partial|few cloud|mostly sun|mostly clear/.test(c)) return "partly";
+    if (/cloud|overcast/.test(c)) return "cloud";
+    if (/clear|sun|fair/.test(c)) return "sun";
+    return "cloud";
+  }
+  // Self-contained animated weather icon (CSS drives the motion; see the wx-anim styles).
+  function wxIcon(kind, size) {
+    size = size || 48;
+    const SUN="#FBBF24", CLOUD="#9AA7B6", CLOUDD="#7E8B9A", RAIN="#38BDF8", SNOW="#CDE9FB", BOLT="#FBBF24", MOON="#E7C766";
+    function rayGroup(cx,cy,r1,r2){ let p='<g class="wxa-rays">'; for(let i=0;i<8;i++){ const a=i*Math.PI/4; p+='<line x1="'+(cx+Math.cos(a)*r1).toFixed(1)+'" y1="'+(cy+Math.sin(a)*r1).toFixed(1)+'" x2="'+(cx+Math.cos(a)*r2).toFixed(1)+'" y2="'+(cy+Math.sin(a)*r2).toFixed(1)+'" stroke="'+SUN+'" stroke-width="3.2" stroke-linecap="round"/>'; } return p+'</g>'; }
+    function cloud(cx,cy,scale,fill){ return '<g transform="translate('+cx+' '+cy+') scale('+(scale||1)+')"><g class="wxa-cloud">' +
+      '<circle cx="-8" cy="2" r="9" fill="'+fill+'"/><circle cx="6" cy="-2" r="12" fill="'+fill+'"/>' +
+      '<circle cx="14" cy="4" r="8" fill="'+fill+'"/><rect x="-16" y="4" width="34" height="12" rx="6" fill="'+fill+'"/>' +
+      '</g></g>'; }
+    function drop(x,y,cls){ return '<line class="'+cls+'" x1="'+x+'" y1="'+y+'" x2="'+x+'" y2="'+(y+6)+'" stroke="'+RAIN+'" stroke-width="3.2" stroke-linecap="round"/>'; }
+    function flake(x,y,cls){ return '<circle class="'+cls+'" cx="'+x+'" cy="'+y+'" r="2.5" fill="'+SNOW+'"/>'; }
+    let inner="";
+    if (kind==="sun") inner = rayGroup(32,32,15,22) + '<circle class="wxa-sun" cx="32" cy="32" r="11" fill="'+SUN+'"/>';
+    else if (kind==="moon") inner = '<g class="wxa-sun"><path d="M42 36a15 15 0 1 1-16-20 12 12 0 0 0 16 20Z" fill="'+MOON+'"/></g><circle class="wxa-twinkle" cx="46" cy="20" r="1.8" fill="'+MOON+'"/><circle class="wxa-twinkle2" cx="50" cy="29" r="1.3" fill="'+MOON+'"/>';
+    else if (kind==="partly") inner = rayGroup(23,23,10,15) + '<circle class="wxa-sun" cx="23" cy="23" r="8" fill="'+SUN+'"/>' + cloud(34,38,0.92,CLOUD);
+    else if (kind==="cloud") inner = cloud(20,26,0.7,CLOUDD) + cloud(32,34,1.05,CLOUD);
+    else if (kind==="rain") inner = cloud(32,26,1,CLOUD) + drop(24,45,"wxa-drop") + drop(32,45,"wxa-drop2") + drop(40,45,"wxa-drop3");
+    else if (kind==="snow") inner = cloud(32,26,1,CLOUD) + flake(24,47,"wxa-flake") + flake(32,45,"wxa-flake2") + flake(40,47,"wxa-flake3");
+    else if (kind==="storm") inner = cloud(32,25,1,CLOUDD) + '<path class="wxa-bolt" d="M34 39l-8 11h6l-2 8 9-13h-6l3-6z" fill="'+BOLT+'"/>' + drop(22,45,"wxa-drop") + drop(43,45,"wxa-drop3");
+    else if (kind==="fog") inner = cloud(32,22,0.85,CLOUD) + '<g stroke="'+CLOUD+'" stroke-width="3.4" stroke-linecap="round"><line class="wxa-fog" x1="18" y1="42" x2="46" y2="42"/><line class="wxa-fog2" x1="16" y1="49" x2="44" y2="49"/><line class="wxa-fog3" x1="20" y1="56" x2="42" y2="56"/></g>';
+    else inner = cloud(32,34,1.05,CLOUD);
+    return '<span class="wx-ic" style="width:'+size+'px;height:'+size+'px"><svg viewBox="0 0 64 64" width="'+size+'" height="'+size+'">'+inner+'</svg></span>';
+  }
+  // Icon + temps + condition row for a daily forecast card.
+  function wxBody(kind, hi, lo, cond) {
+    return '<div style="display:flex;align-items:center;gap:12px">' + wxIcon(kind, 46) +
+      '<div style="min-width:0"><div class="temps" style="margin:0"><span class="hi">'+hi+'°</span><span class="lo"> / '+lo+'°</span></div>' +
+      '<div class="cond" style="margin-top:2px">'+cond+'</div></div></div>';
   }
   async function geocode(name) {
     if (!name) return null;
@@ -2132,7 +2202,9 @@
   function liveWxShell(inner) { return '<div class="section-title" style="margin-bottom:6px"><div><h3>Right now</h3><div class="label">Live conditions</div></div></div>' + inner; }
   function liveStat(label, val) { return '<div><div class="label">'+esc(label)+'</div><div class="num" style="font-weight:600;font-size:1.05rem">'+esc(val)+'</div></div>'; }
   function renderLiveWx(cur, place) {
-    const w = wmoInfo(cur.weather_code); const icon = I["wx_" + w.icon] || I.wx_cloud;
+    const w = wmoInfo(cur.weather_code);
+    let kind = w.icon; if (!cur.is_day && kind === "sun") kind = "moon";
+    const icon = wxIcon(kind, 66);
     const temp = Math.round(cur.temperature_2m); const feels = Math.round(cur.apparent_temperature);
     const timeStr = (cur.time || "").split("T")[1] || "";
     return '<div class="section-title" style="margin-bottom:12px"><div><h3>Right now'+(place?' · '+esc(place):"")+'</h3>' +
@@ -2140,7 +2212,7 @@
       '<button class="icon-btn" data-action="refresh-wx" title="Refresh">'+I.refresh+'</button></div>' +
       '<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">' +
         '<div style="display:flex;align-items:center;gap:14px">' +
-          '<span style="color:var(--accent);display:inline-flex">'+icon+'</span>' +
+          icon +
           '<span style="font-family:var(--font-display);font-size:2.9rem;line-height:1;letter-spacing:-.02em">'+temp+'°</span>' +
           '<div><div style="font-weight:600">'+esc(w.label)+'</div><div class="row-sub">Feels like '+feels+'°</div></div>' +
         '</div>' +
