@@ -218,6 +218,10 @@
 
   .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink);
     display: grid; place-content: center; font-size: .78rem; font-weight: 700; flex: none; font-family: var(--font-mono); }
+  .avatar.has-img { overflow: hidden; background: var(--surface-2); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar-lg { width: 64px; height: 64px; font-size: 1.4rem; }
+  .photo-field { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
   .assign-wrap { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .assign-wrap .label { margin: 0; }
@@ -305,6 +309,8 @@
   .wx-scened .hi, .wx-scened h3, .wx-scened .wx-hi { color: inherit; }
   .wx-scened .icon-btn { color: inherit; background: rgba(255,255,255,.18); }
   .wx-scened .icon-btn:hover { background: rgba(255,255,255,.32); filter: none; }
+  .wx-scened .btn { background: rgba(255,255,255,.2); border-color: transparent; color: inherit; }
+  .wx-scened .btn:hover { background: rgba(255,255,255,.34); }
   .wx-scene { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
   .wx-puff { position: absolute; background: rgba(255,255,255,.5); border-radius: 50%; filter: blur(3px);
     box-shadow: 22px 7px 0 -5px rgba(255,255,255,.42), -20px 9px 0 -7px rgba(255,255,255,.38); animation: wxDrift linear infinite; }
@@ -645,6 +651,30 @@
   }
   function todayISO() { const n = new Date(); return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0"); }
   function initials(name) { return (name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
+  function avatarOf(person, cls) { cls = cls ? (" "+cls) : "";
+    if (person && person.photo) return '<span class="avatar has-img'+cls+'" title="'+esc(person.name||"")+'"><img src="'+esc(person.photo)+'" alt=""></span>';
+    return '<span class="avatar'+cls+'" title="'+esc(person?person.name:"")+'">'+initials(person?person.name:"?")+'</span>'; }
+  function avatarById(trip, id, cls) { return avatarOf((trip.people||[]).find(p=>p.id===id), cls); }
+  function avatarByName(trip, name, cls) { return avatarOf((trip.people||[]).find(p=>p.name===name) || { name: name }, cls); }
+  // Downscale + crop an uploaded image to a small square JPEG data URL (kept small for the shared DB).
+  function resizePhoto(file, cb) {
+    if (!file || !/^image\//.test(file.type)) { cb(null); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 256, c = document.createElement("canvas"); c.width = size; c.height = size;
+        const ctx = c.getContext("2d");
+        const m = Math.min(img.width, img.height), sx = (img.width-m)/2, sy = (img.height-m)/2;
+        ctx.drawImage(img, sx, sy, m, m, 0, 0, size, size);
+        try { cb(c.toDataURL("image/jpeg", 0.82)); } catch (err) { cb(null); }
+      };
+      img.onerror = () => cb(null);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => cb(null);
+    reader.readAsDataURL(file);
+  }
   function esc(s) { return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function money(n) { const v = Number(n)||0; return "$" + v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 
@@ -843,6 +873,25 @@
     overlay.querySelectorAll("[data-chip]").forEach(ch => {
       ch.addEventListener("click", () => ch.classList.toggle("on"));
     });
+    // photo upload wiring
+    overlay.querySelectorAll(".photo-field").forEach(wrap => {
+      const field = wrap.closest(".field");
+      const hidden = field.querySelector('input[type="hidden"]');
+      const fileInp = wrap.querySelector("[data-photo]");
+      const prev = wrap.querySelector(".photo-prev");
+      const clearBtn = wrap.querySelector("[data-photo-clear]");
+      const ini = (hidden && hidden.dataset.initials) || "?";
+      wrap.querySelector("[data-photo-pick]").addEventListener("click", () => fileInp.click());
+      fileInp.addEventListener("change", () => {
+        const f = fileInp.files && fileInp.files[0]; if (!f) return;
+        resizePhoto(f, url => {
+          if (!url) { toast("Couldn't read that image"); return; }
+          hidden.value = url; prev.innerHTML = '<img src="'+url+'" alt="">'; prev.classList.add("has-img");
+          if (clearBtn) clearBtn.style.display = "";
+        });
+      });
+      if (clearBtn) clearBtn.addEventListener("click", () => { hidden.value = ""; prev.innerHTML = ini; prev.classList.remove("has-img"); clearBtn.style.display = "none"; });
+    });
     form.addEventListener("submit", e => {
       e.preventDefault();
       const out = {};
@@ -891,6 +940,20 @@
       inner = '<label style="display:flex;align-items:center;gap:9px;font-weight:400;cursor:pointer">' +
         '<input type="checkbox" '+name+' class="check"'+(val?" checked":"")+'> '+esc(f.checkLabel||"")+'</label>';
       return '<div class="field">'+inner+(f.hint?'<span class="hint">'+esc(f.hint)+'</span>':"")+'</div>';
+    }
+    else if (f.type === "photo") {
+      const ini = esc(f.initials || "?");
+      return '<div class="field"><label>'+esc(f.label)+'</label>' +
+        '<div class="photo-field">' +
+          '<span class="photo-prev avatar avatar-lg'+(val?' has-img':'')+'">'+(val?'<img src="'+esc(val)+'" alt="">':ini)+'</span>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            '<button type="button" class="btn sm" data-photo-pick>'+I.upload+' Upload photo</button>' +
+            '<button type="button" class="btn sm" data-photo-clear'+(val?'':' style="display:none"')+'>Remove</button>' +
+          '</div>' +
+          '<input type="file" accept="image/*" data-photo hidden>' +
+        '</div>' +
+        '<input type="hidden" name="'+f.key+'" value="'+esc(val)+'" data-initials="'+ini+'">' +
+        (f.hint?'<span class="hint">'+esc(f.hint)+'</span>':"") + '</div>';
     }
     else if (f.type === "datalist") {
       const dlopts = (typeof f.options === "function" ? f.options(trip) : f.options) || [];
@@ -1030,7 +1093,7 @@
       '</div></div>';
     html += '<div class="section-title" style="margin-top:18px"><h3>You</h3></div>';
     html += '<div class="card card-pad" style="display:flex;align-items:center;gap:12px">' +
-      '<span class="avatar">'+initials(whoAmI()||"?")+'</span>' +
+      avatarByName(trip, whoAmI()||"?") +
       '<div style="flex:1;min-width:0"><div class="row-title">'+esc(whoAmI()||"Tap Change to set your name")+'</div>' +
       '<div class="row-sub" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>'+(live?"Live sync on — shared with your group":"Local only (this device)")+'</div></div>' +
       '<button class="btn sm" data-action="change-who">Change</button></div>';
@@ -1061,7 +1124,7 @@
   function personBadge(trip, id) {
     if (!id) return '<span class="pill muted">Unassigned</span>';
     const n = personName(trip, id); if (!n) return '<span class="pill muted">Unassigned</span>';
-    return '<span class="avatar" title="'+esc(n)+'">'+initials(n)+'</span>';
+    return avatarById(trip, id);
   }
   function personSelectInline(trip, currentId, action, id) {
     const opts = '<option value="">— Unassigned —</option>' + (trip.people||[]).map(p =>
@@ -1174,21 +1237,22 @@
 
     // weather + quick facts card
     html += '<div style="display:flex;flex-direction:column;gap:16px">';
-    html += '<div class="card card-pad"><div class="section-title"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>';
     const hasForecast = wx && (wx.high || wx.low || wx.condition);
     if (hasForecast) {
       const okind = condIcon(wx.condition); const osc = wxScene(okind);
-      html += '<div class="wx-scened" style="border-radius:20px;padding:16px;margin-top:8px;min-height:110px;background:'+osc.grad+';color:'+osc.ink+'">' +
+      html += '<div class="card card-pad wx-scened" style="min-height:150px;background:'+osc.grad+';color:'+osc.ink+'">' +
         wxSceneLayer(okind) +
+        '<div class="section-title" style="margin-bottom:12px"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>' +
         '<div style="display:flex;align-items:baseline;gap:10px">' +
-          '<span class="wx-hi" style="font-family:var(--font-display);font-size:2.2rem;font-weight:600">'+esc(wx.high||"—")+'°</span>' +
+          '<span class="wx-hi" style="font-family:var(--font-display);font-size:2.7rem;font-weight:600;line-height:1">'+esc(wx.high||"—")+'°</span>' +
           '<span class="lo"> / '+esc(wx.low||"—")+'°</span>' +
           '<span class="cond" style="margin-left:auto;font-weight:600">'+esc(wx.condition||"—")+'</span></div>' +
         '<div class="row-sub" style="margin-top:6px">'+esc(fmtDate(wx.date,"long"))+(wx.precip?' · '+esc(wx.precip)+' precip':"")+'</div></div>';
     } else {
-      html += '<div id="ovWx">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading live conditions…</p>')+'</div>';
+      html += '<div class="card card-pad" id="ovWx" style="min-height:150px">' +
+        '<div class="section-title"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>' +
+        '<p class="row-sub" style="margin:10px 0 0">Loading live conditions…</p></div>';
     }
-    html += '</div>';
     html += '</div>'; // right col
     html += '</div>'; // grid
 
@@ -1854,7 +1918,7 @@
       if (g.meetPoint) bits.push('From '+esc(g.meetPoint));
       if (g.carpool) bits.push('Carpool: '+esc(g.carpool));
       if (g.driver && Number(g.seats) > 0) bits.push(esc(g.seats)+' spare seat'+(Number(g.seats)===1?'':'s'));
-      html += '<div class="row-item">' + '<span class="avatar">'+initials(p.name)+'</span>' +
+      html += '<div class="row-item">' + avatarOf(p) +
         '<div class="row-main"><div class="row-title">'+esc(p.name)+(g.driver?' <span class="pill info" style="margin-left:6px">Driver</span>':"")+'</div>' +
         '<div class="row-sub">' + (bits.length?bits.join(' · '):'No details yet') + '</div></div>' +
         '<div class="row-actions"><button class="icon-btn" data-action="edit-guest" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div>' + '</div>';
@@ -1917,8 +1981,8 @@
     html += '<div class="section-block"><div class="section-title"><h3>Settle up</h3><span class="label">'+(settle.length ? settle.length+" payment"+(settle.length===1?"":"s") : "Fewest transfers")+'</span></div><div class="card card-pad">';
     if (!itemCount) html += '<p style="color:var(--muted);margin:0">Add an expense, or price a bought shopping item, to see who owes whom.</p>';
     else if (!settle.length) html += '<p style="color:var(--accent-ink);margin:0">All square — everyone\'s even.</p>';
-    else html += '<p class="row-sub" style="margin:0 0 12px">Balances are netted to the fewest possible transfers — nobody both pays and gets paid.</p>' + settle.map(s => '<div class="settle"><span class="avatar">'+initials(s.fromName)+'</span><span>'+esc(s.fromName)+'</span>' +
-      '<span class="arrow">→ pays →</span><span class="avatar">'+initials(s.toName)+'</span><span>'+esc(s.toName)+'</span>' +
+    else html += '<p class="row-sub" style="margin:0 0 12px">Balances are netted to the fewest possible transfers — nobody both pays and gets paid.</p>' + settle.map(s => '<div class="settle">'+avatarById(trip, s.fromId)+'<span>'+esc(s.fromName)+'</span>' +
+      '<span class="arrow">→ pays →</span>'+avatarById(trip, s.toId)+'<span>'+esc(s.toName)+'</span>' +
       '<span class="amt">'+money(s.amount)+'</span></div>').join("");
     html += '</div></div>';
 
@@ -1986,7 +2050,7 @@
     const out = []; let i=0, j=0;
     while (i < debtors.length && j < creditors.length) {
       const pay = Math.min(debtors[i].amt, creditors[j].amt);
-      out.push({ fromName: personName(trip,debtors[i].id), toName: personName(trip,creditors[j].id), amount: pay });
+      out.push({ fromId: debtors[i].id, toId: creditors[j].id, fromName: personName(trip,debtors[i].id), toName: personName(trip,creditors[j].id), amount: pay });
       debtors[i].amt -= pay; creditors[j].amt -= pay;
       if (debtors[i].amt < 0.01) i++; if (creditors[j].amt < 0.01) j++;
     }
@@ -2120,9 +2184,9 @@
     "add-pack-choose": () => openAddPackingChooser(),
 
     // guests / people
-    "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
+    "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"},{key:"photo",label:"Photo (optional)",type:"photo",initials:"?",hint:"Auto-shrunk to a small avatar and shown across the app."}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name, photo:v.photo||""}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
     "edit-guest": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); let g = t.guests.find(x=>x.personId===pid); if(!g){ g = {id:uid(), personId:pid, rsvp:"", departure:"", carpool:"", driver:false, seats:"", meetPoint:""}; t.guests.push(g); }
-      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true}].concat(guestFields()), values:Object.assign({name:person.name}, g), onSubmit: v => { person.name = v.name; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; g.seats=v.seats; g.meetPoint=v.meetPoint; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
+      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true},{key:"photo",label:"Photo",type:"photo",initials:initials(person.name),hint:"Auto-shrunk to a small avatar and shown across the app."}].concat(guestFields()), values:Object.assign({name:person.name, photo:person.photo||""}, g), onSubmit: v => { person.name = v.name; person.photo = v.photo||""; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; g.seats=v.seats; g.meetPoint=v.meetPoint; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
     "del-person": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); confirmDialog("Remove "+person.name+"?", "This removes them from the crew and unassigns them from roles, meals and packing.", () => {
         t.people = t.people.filter(p=>p.id!==pid); t.guests = t.guests.filter(g=>g.personId!==pid);
         t.roles.forEach(r=>{ if(r.personId===pid) r.personId=""; }); t.meals.forEach(m=>{ if(m.personId===pid) m.personId=""; }); t.packing.forEach(p=>{ if(p.personId===pid) p.personId=""; });
@@ -2318,8 +2382,21 @@
     const b = document.getElementById(boxId); if (!b) return;
     const kind = liveKind(cur); const sc = wxScene(kind);
     b.classList.add("wx-scened"); b.style.background = sc.grad; b.style.color = sc.ink;
-    if (boxId === "ovWx") { b.style.borderRadius = "20px"; b.style.padding = "16px"; b.style.marginTop = "8px"; b.style.minHeight = "116px"; }
-    b.innerHTML = wxSceneLayer(kind) + renderLiveWx(cur, place);
+    if (boxId === "ovWx") { b.style.minHeight = "150px"; b.innerHTML = wxSceneLayer(kind) + renderOvWx(cur, place); }
+    else { b.innerHTML = wxSceneLayer(kind) + renderLiveWx(cur, place); }
+  }
+  function renderOvWx(cur, place) {
+    const w = wmoInfo(cur.weather_code); const temp = Math.round(cur.temperature_2m); const feels = Math.round(cur.apparent_temperature);
+    return '<div class="section-title" style="margin-bottom:12px"><div><h3>Weather</h3><div class="label">'+(place?esc(place)+' · ':'')+'live now</div></div>' +
+      '<button class="btn sm" data-action="nav" data-section="weather">All days</button></div>' +
+      '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:baseline;gap:12px">' +
+          '<span style="font-family:var(--font-display);font-size:2.7rem;font-weight:600;line-height:1">'+temp+'°</span>' +
+          '<div><div style="font-weight:700">'+esc(w.label)+'</div><div class="row-sub">Feels like '+feels+'°</div></div></div>' +
+        '<div style="display:flex;gap:18px;margin-left:auto;flex-wrap:wrap">' +
+          liveStat("Wind", Math.round(cur.wind_speed_10m)+" km/h") + liveStat("Humidity", cur.relative_humidity_2m+"%") + liveStat("Precip", cur.precipitation+" mm") +
+        '</div>' +
+      '</div>';
   }
   function clearScene(boxId) { const b = document.getElementById(boxId); if (!b) return; b.classList.remove("wx-scened"); b.style.background = ""; b.style.color = ""; b.style.borderRadius = ""; b.style.padding = ""; b.style.marginTop = ""; b.style.minHeight = ""; }
   async function loadLiveWeather(force) {
@@ -2430,7 +2507,7 @@
     const cur = whoAmI();
     const overlay = document.getElementById("overlay");
     const circles = people.map(p => '<button type="button" class="idpick" data-action="pick-who" data-name="'+esc(p.name)+'">' +
-      '<span class="avatar idpick-av'+(cur === p.name ? " sel" : "")+'">'+initials(p.name)+'</span>' +
+      (p.photo ? '<span class="avatar idpick-av has-img'+(cur === p.name ? " sel" : "")+'"><img src="'+esc(p.photo)+'" alt=""></span>' : '<span class="avatar idpick-av'+(cur === p.name ? " sel" : "")+'">'+initials(p.name)+'</span>') +
       '<span class="idpick-name">'+esc(p.name)+'</span></button>').join("");
     overlay.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="max-width:440px">' +
       '<div class="modal-head"><h3>Who are you?</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
@@ -2514,7 +2591,7 @@
     if (!entries.length) return html + emptyState(I.tracker, "No activity yet for this trip. Edits by you and your group will show up here.");
     html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
     entries.forEach(a => {
-      html += '<div class="row-item"><span class="avatar">'+initials(a.who||"?")+'</span>' +
+      html += '<div class="row-item">'+avatarByName(trip, a.who||"?") +
         '<div class="row-main"><div class="row-title" style="font-weight:400"><b>'+esc(a.who||"Someone")+'</b> '+esc(a.text||"")+'</div>' +
         '<div class="row-sub">'+esc(fmtWhen(a.ts))+'</div></div></div>';
     });
