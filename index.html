@@ -272,11 +272,20 @@
   .timeline::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
   .tl-item { position: relative; padding: 8px 0 8px 6px; display: flex; gap: 14px; }
   .tl-item::before { content: ""; position: absolute; left: -19px; top: 15px; width: 9px; height: 9px;
-    border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+    border-radius: 50%; background: var(--dot, var(--accent)); border: 2px solid var(--surface); transition: box-shadow .2s; }
   .tl-time { font-family: var(--font-mono); font-size: .82rem; color: var(--accent-ink); font-weight: 600;
     width: 62px; flex: none; padding-top: 1px; }
   @media (prefers-color-scheme: dark) { .tl-time { color: var(--accent); } }
   :root[data-theme="dark"] .tl-time { color: var(--accent); }
+  .sched-ic { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
+  .sched-ic svg { width: 15px; height: 15px; }
+  .tl-item.tl-now::before { width: 12px; height: 12px; left: -20px; top: 13px; background: var(--ember);
+    box-shadow: 0 0 0 4px var(--ember-soft); animation: tlpulse 1.8s ease-in-out infinite; }
+  @keyframes tlpulse { 0%,100% { box-shadow: 0 0 0 4px var(--ember-soft); } 50% { box-shadow: 0 0 0 7px var(--ember-soft); } }
+  .tl-item.tl-now .row-title { color: var(--ember); font-weight: 600; }
+  .day-head { scroll-margin-top: 64px; }
+  .sched-wx { margin-left: auto; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .sched-jumpbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 8px 0; margin: 2px 0 6px; }
 
   .settle { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: .95rem; }
   .settle:last-child { border-bottom: none; }
@@ -501,6 +510,8 @@
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
     upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg>',
     tent: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20 12 4l9 16M12 4v16M12 20l-4-6M12 20l4-6"/></svg>',
+    car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l1.5-4.5A2 2 0 0 1 8.4 7h7.2a2 2 0 0 1 1.9 1.5L19 13M5 13h14v4H5zM5 17v2M19 17v2"/><circle cx="8" cy="15" r=".6"/><circle cx="16" cy="15" r=".6"/></svg>',
+    coffee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8ZM17 9h2a2 2 0 0 1 0 4h-2M7 4v1M11 4v1"/></svg>',
     theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
@@ -1001,6 +1012,7 @@
     if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
     if (ui.section === "packing") loadPackingWx();
+    if (ui.section === "schedule") loadScheduleWx();
     if (ui.section === "tracker") startActivityWatch();
   }
 
@@ -1360,31 +1372,105 @@
   }
 
   /* ---------- Schedule ---------- */
+  const SCHED_TYPES = {
+    "Activity":  { tone:"accent", color:"var(--accent)", icon:() => I.overview },
+    "Meal":      { tone:"ember",  color:"var(--ember)",  icon:() => I.meals },
+    "Travel":    { tone:"info",   color:"var(--info)",   icon:() => I.car },
+    "Setup":     { tone:"warn",   color:"var(--warn)",   icon:() => I.tent },
+    "Free time": { tone:"info",   color:"var(--info)",   icon:() => I.coffee },
+    "Other":     { tone:"muted",  color:"var(--muted)",  icon:() => "" },
+  };
+  function schedTypeOf(s) { return SCHED_TYPES[s.type] || SCHED_TYPES["Activity"]; }
+  function schedDateTime(day, time) {
+    const d = parseDate(day); if (!d) return null;
+    const parts = (time||"00:00").split(":"); d.setHours(Number(parts[0])||0, Number(parts[1])||0, 0, 0);
+    return d;
+  }
   function secSchedule(trip) {
     let html = pageHead("Daily Schedule", "The plan, hour by hour.", addBtn("add-sched","Add item"));
     const days = tripDays(trip);
     if (!trip.schedule.length) return html + emptyState(I.schedule, "No schedule yet. Lay out arrival, activities and departure.", "add-sched", "Add first item");
     const groups = days.length ? days.slice() : [];
     trip.schedule.forEach(s => { if (groups.indexOf(s.day) < 0) groups.push(s.day||""); });
-    groups.forEach(day => {
+    const dayGroups = groups.filter(day => trip.schedule.some(s => (s.day||"")===(day||"")));
+
+    // --- Now / Up next (only while the trip is in progress) ---
+    const inProgress = days.indexOf(todayISO()) >= 0;
+    let nowId = "", nextId = "", curItem = null, nextItem = null;
+    if (inProgress) {
+      const now = new Date();
+      const seq = trip.schedule.map(s => ({ s, dt: schedDateTime(s.day, s.time) })).filter(x => x.dt).sort((a,b) => a.dt - b.dt);
+      const nx = seq.find(x => x.dt > now);
+      if (nx) { nextId = nx.s.id; nextItem = nx.s; }
+      for (let i = seq.length - 1; i >= 0; i--) { if (seq[i].dt <= now) { if (seq[i].s.day === todayISO()) { nowId = seq[i].s.id; curItem = seq[i].s; } break; } }
+    }
+    if (inProgress && (curItem || nextItem)) {
+      html += '<div class="card card-pad section-block" style="background:var(--ember-soft);border:none;display:flex;gap:22px;flex-wrap:wrap;align-items:center">';
+      if (curItem) html += '<div><div class="label" style="color:var(--ember)">● Happening now</div>' +
+        '<div class="row-title" style="font-size:1.05rem">'+esc(curItem.activity)+'</div>' +
+        '<div class="row-sub">from '+esc(curItem.time||"—")+'</div></div>';
+      if (nextItem) html += '<div style="'+(curItem?'border-left:1px solid var(--border-strong);padding-left:22px':'')+'">' +
+        '<div class="label">Up next</div><div class="row-title" style="font-size:1.05rem">'+esc(nextItem.activity)+'</div>' +
+        '<div class="row-sub">'+esc(fmtDate(nextItem.day,"dow"))+' · '+esc(nextItem.time||"—")+'</div></div>';
+      html += '</div>';
+    }
+
+    // --- Day jump pills ---
+    if (dayGroups.length > 1) {
+      html += '<div class="filterbar sched-jumpbar">';
+      dayGroups.forEach(day => { html += '<button class="chip-toggle" data-action="sched-jump" data-day="'+esc(day||"none")+'">'+esc(day?fmtDate(day,"dow"):"Other")+'</button>'; });
+      html += '</div>';
+    }
+
+    dayGroups.forEach(day => {
       const items = trip.schedule.filter(s => (s.day||"")===(day||"")).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
       if (!items.length) return;
-      html += '<div class="day-head"><h4>'+esc(day?fmtDate(day,"long"):"Unscheduled")+'</h4></div>';
+      const w = day ? (trip.weather||[]).find(x => x.date === day) : null;
+      const wx = (w && (w.high || w.low))
+        ? '<span class="sched-wx">'+esc(w.high||"—")+'° / '+esc(w.low||"—")+'°</span>'
+        : (day ? '<span class="sched-wx" id="schedwx_'+esc(day)+'"></span>' : "");
+      html += '<div class="day-head" id="schedday_'+esc(day||"none")+'"><h4>'+esc(day?fmtDate(day,"long"):"Unscheduled")+'</h4>'+wx+'</div>';
       html += '<div class="card card-pad"><div class="timeline">';
       items.forEach(s => {
-        html += '<div class="tl-item"><span class="tl-time num">'+esc(s.time||"—")+'</span>' +
-          '<div style="flex:1"><div class="row-title">'+esc(s.activity)+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div>' +
+        const st = schedTypeOf(s); const ic = st.icon();
+        const mark = s.id===nowId ? '<span class="pill ember" style="margin-left:8px">NOW</span>'
+          : (s.id===nextId ? '<span class="pill info" style="margin-left:8px">UP NEXT</span>' : "");
+        const cls = "tl-item" + (s.id===nowId?" tl-now":"");
+        html += '<div class="'+cls+'" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(s.time||"—")+'</span>' +
+          '<div style="flex:1"><div class="row-title">'+(ic?'<span class="sched-ic" style="color:'+st.color+'">'+ic+'</span>':"")+esc(s.activity)+mark+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div>' +
           rowActions("edit-sched","del-sched",s.id) + '</div>';
       });
       html += '</div></div>';
     });
     return html;
   }
+  let schedWxCache = null, schedWxKey = "";
+  async function loadScheduleWx(force) {
+    const need = Array.from(document.querySelectorAll(".sched-wx[id]")).filter(s => !s.textContent.trim());
+    if (!need.length) return;
+    const t = activeTrip(); const days = tripDays(t); if (!days.length) return;
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    if (!(lat && lon)) return;
+    const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
+    let daily = (packWxCache && packWxKey === key) ? packWxCache : ((schedWxCache && schedWxKey === key && !force) ? schedWxCache : null);
+    if (!daily) {
+      try {
+        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
+        const j = await r.json();
+        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; schedWxCache = daily; schedWxKey = key; }
+      } catch (e) {}
+    }
+    if (!daily || !daily.time) return;
+    const map = {}; daily.time.forEach((d, i) => { map[d] = { hi: daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null }; });
+    need.forEach(span => { const w = map[span.id.replace("schedwx_","")]; if (w && w.hi != null) span.textContent = Math.round(w.hi)+"° / "+Math.round(w.lo)+"°"; });
+  }
   function schedFields(trip) {
     const days = tripDays(trip);
     return [
       { key:"day", label:"Day", type:"select", options: () => (days.length?days:[""]).map(d => ({value:d, label: d?fmtDate(d,"long"):"Unscheduled"})) },
       { key:"time", label:"Time", type:"time", row:true },
+      { key:"type", label:"Type", type:"select", options:["Activity","Meal","Travel","Setup","Free time","Other"] },
       { key:"activity", label:"Activity", type:"text", required:true, placeholder:"e.g. Hike to Mazinaw Rock" },
       { key:"notes", label:"Notes", type:"text", placeholder:"Optional detail" },
     ];
@@ -1784,6 +1870,7 @@
     "add-sched": () => { const t = activeTrip(); openForm({ title:"Add schedule item", fields: schedFields(t), values:{ day:(tripDays(t)[0]||"") }, onSubmit: v => { t.schedule.push(Object.assign({id:uid()}, v)); save(); logActivity("added to the schedule: “"+v.activity+"”"); render(); toast("Added"); } }); },
     "edit-sched": (el) => { const t = activeTrip(); const s = findById(t.schedule, el.dataset.id); openForm({ title:"Edit schedule item", fields: schedFields(t), values:s, onSubmit: v => { Object.assign(s, v); save(); logActivity("edited schedule item “"+s.activity+"”"); render(); }, onDelete: () => delItem("schedule", s.id, "Delete this item?") }); },
     "del-sched": (el) => delItem("schedule", el.dataset.id, "Delete this item?"),
+    "sched-jump": (el) => { const target = document.getElementById("schedday_"+el.dataset.day); if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); },
 
     // packing
     "add-pack": () => { const t = activeTrip(); openForm({ title:"Add packing item", fields: packFields(), values:{category:"Shelter & Sleep"}, onSubmit: v => { t.packing.push(Object.assign({id:uid(), packed:false}, v)); save(); logActivity("added packing item “"+v.item+"”"); render(); toast("Added"); } }); },
@@ -1949,7 +2036,7 @@
       if (packWxCache && packWxKey === key && !force) daily = packWxCache;
       else {
         try {
-          const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date="+days[0]+"&end_date="+days[days.length-1]+"&latitude="+lat+"&longitude="+lon);
+          const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
           const j = await r.json();
           if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; packWxCache = daily; packWxKey = key; }
         } catch (e) {}
@@ -1963,6 +2050,7 @@
     let minLow = Infinity, maxHigh = -Infinity, rainDays = [], stormDays = [], gotData = false, live = false;
     if (daily && daily.time && daily.time.length) {
       daily.time.forEach((d, i) => {
+        if (days.indexOf(d) < 0) return; // only the trip's own days
         gotData = true; live = true;
         const hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null;
         const lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
@@ -2261,6 +2349,15 @@
     if (!t.personalPacking || typeof t.personalPacking !== "object" || Array.isArray(t.personalPacking)) t.personalPacking = {};
     (t.packing || []).forEach(p => { if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; });
     (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
+    (t.schedule || []).forEach(s => { if (!s.type) s.type = schedTypeGuess(s.activity); });
+  }
+  function schedTypeGuess(activity) {
+    const a = (activity||"").toLowerCase();
+    if (/check ?in|check ?out|arriv|depart|drive|driving|\bleave\b|pack up|head (home|back)|road|carpool/.test(a)) return "Travel";
+    if (/breakfast|lunch|dinner|bbq|s'?mores|snack|brunch|coffee|\bmeal\b|cook/.test(a)) return "Meal";
+    if (/set ?up|setup|pitch|tear ?down|take down/.test(a)) return "Setup";
+    if (/relax|free time|chill|\bnap\b|hang out|stargaz|campfire/.test(a)) return "Free time";
+    return "Activity";
   }
   function isEditing() {
     const ov = document.getElementById("overlay");
