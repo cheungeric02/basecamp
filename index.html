@@ -520,6 +520,8 @@
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
     tracker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-12 2 6h6"/></svg>',
+    explore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>',
     chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
     wx_sun: '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>',
@@ -537,6 +539,7 @@
     { id: "shopping", label: "Shopping", icon: I.shopping },
     { id: "roles", label: "Roles", icon: I.roles },
     { id: "schedule", label: "Schedule", icon: I.schedule },
+    { id: "todo", label: "Things to Do", short: "Explore", icon: I.explore },
     { id: "packing", label: "Packing", icon: I.packing },
     { id: "guests", label: "Guests & Carpool", short: "Guests", icon: I.guests },
     { id: "budget", label: "Budget", icon: I.budget },
@@ -723,7 +726,7 @@
     }
     // migrate: ensure fields exist
     state.trips.forEach(t => {
-      ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
+      ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people","todos"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
       if (typeof t.notes !== "string") t.notes = "";
     });
     if (state.theme !== "light" && state.theme !== "dark") { state.theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; }
@@ -884,7 +887,7 @@
   function sectionFab() {
     const t = activeTrip();
     if (t && t.lockHash && !isTripUnlocked(t)) return "";
-    const map = { meals: "add-meal", shopping: "add-shop", roles: "add-role", schedule: "add-sched", budget: "add-expense", packing: "add-pack-choose" };
+    const map = { meals: "add-meal", shopping: "add-shop", roles: "add-role", schedule: "add-sched", todo: "add-todo", budget: "add-expense", packing: "add-pack-choose" };
     const action = map[ui.section];
     if (!action) return "";
     return '<button class="md-fab" data-action="'+action+'" title="Add" aria-label="Add">'+I.plus+'</button>';
@@ -903,6 +906,7 @@
       shopping: trip.shopping.filter(x=>!x.gotIt).length,
       roles: trip.roles.length,
       schedule: trip.schedule.length,
+      todo: (trip.todos||[]).length,
       packing: trip.packing.filter(x=>!x.packed).length,
       guests: trip.people.length,
       budget: trip.budget.length,
@@ -1006,13 +1010,14 @@
     const el = document.getElementById("content");
     if (trip && trip.lockHash && !isTripUnlocked(trip)) { el.innerHTML = lockScreen(trip); return; }
     const map = { overview: secOverview, weather: secWeather, meals: secMeals, shopping: secShopping,
-      roles: secRoles, schedule: secSchedule, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker, settings: secSettings };
+      roles: secRoles, schedule: secSchedule, todo: secTodo, packing: secPacking, guests: secGuests, budget: secBudget, notes: secNotes, tracker: secTracker, settings: secSettings };
     el.innerHTML = (map[ui.section] || secOverview)(trip);
     if (ui.section === "notes") wireNotes(trip);
     if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
     if (ui.section === "packing") loadPackingWx();
     if (ui.section === "schedule") loadScheduleWx();
+    if (ui.section === "todo") loadTodoDiscovery();
     if (ui.section === "tracker") startActivityWatch();
   }
 
@@ -1476,6 +1481,107 @@
     ];
   }
 
+  /* ---------- Things to Do ---------- */
+  const TODO_TONE = { "Hike":"accent", "Swim":"info", "Sightseeing":"ember", "Food & Drink":"warn", "Shopping":"info", "Other":"muted" };
+  let todoCache = null, todoKey = "";
+  function secTodo(trip) {
+    let html = pageHead("Things to Do", "Popular spots and what the area's known for"+(trip.location?" — near "+esc(trip.location):"")+".", addBtn("add-todo","Add idea"));
+    if (!trip.location && !(trip.lat && trip.lon)) {
+      return html + emptyState(I.explore, "Add a location in trip details and this fills with what's worth doing nearby.", "edit-trip", "Set location");
+    }
+    // Our saved ideas
+    if ((trip.todos||[]).length) {
+      html += '<div class="section-title"><h3>Our list</h3><span class="label">'+trip.todos.length+' saved</span></div>';
+      html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
+      trip.todos.forEach(td => {
+        html += '<div class="row-item">' +
+          '<span class="pill '+(TODO_TONE[td.category]||"muted")+'" style="min-width:84px;justify-content:center">'+esc(td.category||"Idea")+'</span>' +
+          '<div class="row-main"><div class="row-title">'+esc(td.title)+'</div>'+(td.notes?'<div class="row-sub">'+esc(td.notes)+'</div>':"")+'</div>' +
+          (td.url?'<a class="btn sm" href="'+esc(td.url)+'" target="_blank" rel="noopener">Info</a>':"") +
+          rowActions("edit-todo","del-todo",td.id) + '</div>';
+      });
+      html += '</div></div>';
+    }
+    // Auto-discovered
+    html += '<div class="section-title" style="margin-top:18px"><h3>Popular nearby</h3><button class="icon-btn" data-action="refresh-todo" title="Refresh">'+I.refresh+'</button></div>';
+    html += '<div id="todoDiscover"><div class="card card-pad" style="color:var(--muted)">Finding notable spots nearby…</div></div>';
+    return html;
+  }
+  function todoFields() {
+    return [
+      { key:"title", label:"What / where", type:"text", required:true, placeholder:"e.g. Hike to Mazinaw Rock" },
+      { key:"category", label:"Type", type:"select", options:["Sightseeing","Hike","Swim","Food & Drink","Shopping","Other"] },
+      { key:"notes", label:"Notes", type:"textarea", placeholder:"Why it's worth it, tips, cost…" },
+      { key:"url", label:"Link (optional)", type:"text", placeholder:"https://…" },
+    ];
+  }
+  async function loadTodoDiscovery(force) {
+    const box = document.getElementById("todoDiscover"); if (!box) return;
+    const t = activeTrip();
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon), place = t.location;
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; if (!place) place = g.place; } }
+    if (!(lat && lon)) { box.innerHTML = '<div class="card card-pad" style="color:var(--muted)">Add a location or coordinates in trip details to discover nearby spots.</div>'; return; }
+    const key = lat.toFixed(3)+","+lon.toFixed(3);
+    if (todoCache && todoKey === key && !force) { box.innerHTML = renderTodoCards(todoCache); return; }
+    box.innerHTML = '<div class="card card-pad" style="color:var(--muted)">Finding notable spots near '+esc(place||"your location")+'…</div>';
+    try {
+      const geo = await fetch("https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&list=geosearch&gscoord="+lat+"%7C"+lon+"&gsradius=10000&gslimit=30");
+      const gj = await geo.json();
+      const spots = (gj.query && gj.query.geosearch) || [];
+      if (!spots.length) { box.innerHTML = '<div class="card card-pad" style="color:var(--muted)">No notable spots found within ~10 km. Add your own ideas above.</div>'; return; }
+      const spotById = {}; spots.forEach(s => spotById[s.pageid] = s);
+      const ids = spots.map(s => s.pageid).slice(0, 24);
+      const det = await fetch("https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts|pageimages|info&inprop=url&exintro=1&explaintext=1&piprop=thumbnail&pithumbsize=440&pageids="+ids.join("%7C"));
+      const dj = await det.json();
+      const pages = (dj.query && dj.query.pages) || {};
+      let items = ids.map(id => {
+        const p = pages[id]; const sp = spotById[id]; if (!p || !sp) return null;
+        return { title: p.title, extract: p.extract || "", thumb: (p.thumbnail && p.thumbnail.source) || "",
+          url: p.fullurl || ("https://en.wikipedia.org/?curid="+id), dist: sp.dist || 0, lat: sp.lat, lon: sp.lon };
+      }).filter(Boolean);
+      items = items.filter(x => x.extract && x.extract.length > 40 && !/\bmay refer to\b/i.test(x.extract));
+      // Rank: attractions & photographed spots up top, bare lakes/creeks/etc. down.
+      const score = x => {
+        let s = 0; const e = x.extract.toLowerCase();
+        if (x.thumb) s += 3;
+        if (/\b(provincial park|national park|conservation area|trail|hik|waterfall|falls|beach|museum|historic|heritage|lookout|viewpoint|rock|cliff|mountain|summit|pictograph|landmark|attraction|gallery|lighthouse|park|scenic|canoe|paddl|campground|fort|winery|brewery|distillery)\b/.test(e)) s += 2;
+        if (/^.{0,80}\bis a (small )?(lake|creek|stream|river|pond|bay|marsh|brook|drainage basin|unincorporated|hamlet|township)\b/.test(e)) s -= 3;
+        return s - x.dist / 20000;
+      };
+      items.sort((a,b) => score(b) - score(a));
+      items = items.slice(0, 10);
+      if (!items.length) { box.innerHTML = '<div class="card card-pad" style="color:var(--muted)">Nothing notable enough to list within ~10 km. Add your own ideas above.</div>'; return; }
+      todoCache = { place: place, items: items }; todoKey = key;
+      box.innerHTML = renderTodoCards(todoCache);
+    } catch (e) {
+      box.innerHTML = '<div class="card card-pad" style="color:var(--muted)">Couldn\'t load nearby spots right now. <button class="btn sm" data-action="refresh-todo">Retry</button></div>';
+    }
+  }
+  function renderTodoCards(data) {
+    if (!data.items.length) return '<div class="card card-pad" style="color:var(--muted)">No notable spots found nearby. Add your own ideas above.</div>';
+    let html = '<div class="grid cols-2">';
+    data.items.forEach(x => {
+      const km = x.dist ? (x.dist >= 1000 ? (x.dist/1000).toFixed(1)+" km away" : Math.round(x.dist)+" m away") : "";
+      const ex = x.extract.length > 230 ? x.extract.slice(0, 227).trim()+"…" : x.extract;
+      const mapUrl = (x.lat && x.lon) ? ("https://www.google.com/maps/search/?api=1&query="+x.lat+","+x.lon)
+        : ("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(x.title+(data.place?(", "+data.place):"")));
+      html += '<div class="card" style="overflow:hidden;display:flex;flex-direction:column">' +
+        (x.thumb ? '<img src="'+esc(x.thumb)+'" alt="" loading="lazy" style="width:100%;height:158px;object-fit:cover">' : "") +
+        '<div class="card-pad" style="flex:1;display:flex;flex-direction:column;gap:9px">' +
+          '<div style="display:flex;align-items:baseline;gap:8px"><h4 style="font-size:1.08rem">'+esc(x.title)+'</h4>'+(km?'<span class="label" style="margin-left:auto;white-space:nowrap">'+esc(km)+'</span>':"")+'</div>' +
+          '<p class="row-sub" style="margin:0;flex:1">'+esc(ex)+'</p>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">' +
+            '<a class="btn sm" href="'+esc(x.url)+'" target="_blank" rel="noopener">Read more</a>' +
+            '<a class="btn sm" href="'+esc(mapUrl)+'" target="_blank" rel="noopener">'+I.pin+' Map</a>' +
+            '<button class="btn sm" data-action="save-todo" data-title="'+esc(x.title)+'" data-url="'+esc(x.url)+'">'+I.star+' Save</button>' +
+          '</div>' +
+        '</div></div>';
+    });
+    html += '</div>';
+    html += '<div class="label" style="margin-top:12px;text-transform:none;letter-spacing:0">Auto-discovered from Wikipedia (most relevant first). Double-check hours &amp; access before you go.</div>';
+    return html;
+  }
+
   /* ---------- Packing ---------- */
   const PERSONAL_CATS = ["Clothing","Toiletries","Health & Meds","Electronics","Documents","Other"];
   function myPersonalList(trip) {
@@ -1871,6 +1977,13 @@
     "edit-sched": (el) => { const t = activeTrip(); const s = findById(t.schedule, el.dataset.id); openForm({ title:"Edit schedule item", fields: schedFields(t), values:s, onSubmit: v => { Object.assign(s, v); save(); logActivity("edited schedule item “"+s.activity+"”"); render(); }, onDelete: () => delItem("schedule", s.id, "Delete this item?") }); },
     "del-sched": (el) => delItem("schedule", el.dataset.id, "Delete this item?"),
     "sched-jump": (el) => { const target = document.getElementById("schedday_"+el.dataset.day); if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); },
+
+    // things to do
+    "add-todo": () => { const t = activeTrip(); openForm({ title:"Add an idea", fields: todoFields(), values:{ category:"Sightseeing" }, onSubmit: v => { t.todos.push(Object.assign({id:uid()}, v)); save(); logActivity("added a thing to do: “"+v.title+"”"); render(); toast("Added to our list"); } }); },
+    "edit-todo": (el) => { const t = activeTrip(); const td = findById(t.todos, el.dataset.id); openForm({ title:"Edit idea", fields: todoFields(), values:td, onSubmit: v => { Object.assign(td, v); save(); logActivity("edited “"+td.title+"”"); render(); }, onDelete: () => delItem("todos", td.id, "Remove this idea?") }); },
+    "del-todo": (el) => delItem("todos", el.dataset.id, "Remove this idea?"),
+    "refresh-todo": () => loadTodoDiscovery(true),
+    "save-todo": (el) => { const t = activeTrip(); const title = el.dataset.title; if (!title) return; if ((t.todos||[]).some(x => x.title === title)) { toast("Already on our list"); return; } t.todos.push({ id:uid(), title:title, category:"Sightseeing", notes:"", url:el.dataset.url||"" }); save(); logActivity("saved “"+title+"” to things to do"); render(); toast("Saved to our list"); },
 
     // packing
     "add-pack": () => { const t = activeTrip(); openForm({ title:"Add packing item", fields: packFields(), values:{category:"Shelter & Sleep"}, onSubmit: v => { t.packing.push(Object.assign({id:uid(), packed:false}, v)); save(); logActivity("added packing item “"+v.item+"”"); render(); toast("Added"); } }); },
