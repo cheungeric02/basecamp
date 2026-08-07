@@ -1015,6 +1015,7 @@
     if (ui.section === "notes") wireNotes(trip);
     if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
+    if (ui.section === "weather") loadInfoForecast();
     if (ui.section === "packing") loadPackingWx();
     if (ui.section === "schedule") loadScheduleWx();
     if (ui.section === "todo") loadTodoDiscovery();
@@ -1191,20 +1192,22 @@
       html += '<div class="card card-pad" style="color:var(--muted)">Set trip dates in Edit trip to lay out the daily forecast.</div>';
     } else {
       html += '<div class="card card-pad" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;background:var(--info-soft);border-color:transparent">' +
-        '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Closer to the trip, fill in each day\'s forecast — tap a card to edit.</span></div>';
+        '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Live forecast fills in automatically within ~16 days of the trip. Tap a card to override with your own note.</span></div>';
       html += '<div class="wx-grid">';
       days.forEach(d => {
         const w = (trip.weather||[]).find(x => x.date === d) || { date: d };
         const filled = w.high || w.low || w.condition;
         html += '<button class="card wx" data-action="edit-weather" data-id="'+d+'" style="text-align:left;cursor:pointer;color:inherit">' +
           '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
+          '<div class="wx-body" id="infowx_'+esc(d)+'">' +
           (filled ?
             '<div class="temps"><span class="hi">'+esc(w.high||"—")+'°</span><span class="lo">/ '+esc(w.low||"—")+'°</span></div>' +
             '<div class="cond"><span class="pill info">'+esc(w.condition||"—")+'</span></div>' +
             (w.precip?'<div class="row-sub" style="margin-top:8px">Precip: '+esc(w.precip)+'</div>':"") +
-            (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"")
-            : '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Tap to add forecast</div>') +
-          '</button>';
+            (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"") +
+            '<div class="row-sub" style="color:var(--muted)">Your note · tap to edit</div>'
+            : '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Loading forecast…</div>') +
+          '</div></button>';
       });
       html += '</div>';
     }
@@ -1469,6 +1472,42 @@
     if (!daily || !daily.time) return;
     const map = {}; daily.time.forEach((d, i) => { map[d] = { hi: daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null }; });
     need.forEach(span => { const w = map[span.id.replace("schedwx_","")]; if (w && w.hi != null) span.textContent = Math.round(w.hi)+"° / "+Math.round(w.lo)+"°"; });
+  }
+  async function loadInfoForecast(force) {
+    const bodies = Array.from(document.querySelectorAll(".wx-body[id^='infowx_']"));
+    if (!bodies.length) return;
+    const t = activeTrip();
+    const manual = {}; (t.weather||[]).forEach(w => { if (w.high || w.low || w.condition) manual[w.date] = true; });
+    const need = bodies.filter(b => !manual[b.id.replace("infowx_","")]); // don't overwrite hand-entered forecasts
+    if (!need.length) return;
+    const days = tripDays(t); if (!days.length) return;
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    if (!(lat && lon)) return;
+    const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
+    let daily = (packWxCache && packWxKey === key) ? packWxCache : ((schedWxCache && schedWxKey === key && !force) ? schedWxCache : null);
+    if (!daily) {
+      try {
+        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
+        const j = await r.json();
+        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; packWxCache = daily; packWxKey = key; }
+      } catch (e) {}
+    }
+    if (!daily || !daily.time) return;
+    const map = {}; daily.time.forEach((d, i) => { map[d] = {
+      hi: daily.temperature_2m_max ? daily.temperature_2m_max[i] : null,
+      lo: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null,
+      code: daily.weather_code ? daily.weather_code[i] : null,
+      pp: daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null }; });
+    need.forEach(b => {
+      const w = map[b.id.replace("infowx_","")];
+      if (!w || w.hi == null) { b.innerHTML = '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Forecast not out yet · tap to add</div>'; return; }
+      const info = w.code != null ? wmoInfo(w.code) : { label: "—" };
+      b.innerHTML = '<div class="temps"><span class="hi">'+Math.round(w.hi)+'°</span><span class="lo">/ '+Math.round(w.lo)+'°</span></div>' +
+        '<div class="cond"><span class="pill info">'+esc(info.label)+'</span></div>' +
+        (w.pp != null ? '<div class="row-sub" style="margin-top:8px">Precip: '+w.pp+'%</div>' : "") +
+        '<div class="row-sub" style="color:var(--accent)">● Live · tap to override</div>';
+    });
   }
   function schedFields(trip) {
     const days = tripDays(trip);
