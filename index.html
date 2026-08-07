@@ -1230,17 +1230,17 @@
       '<div class="label">'+esc(fmtDate(focusDay,"long")||"Schedule")+'</div></div>' +
       '<button class="btn sm" data-action="nav" data-section="schedule">Full schedule</button></div>';
     if (daySched.length) {
-      html += '<div class="timeline">' + daySched.slice(0,6).map(s =>
-        '<div class="tl-item"><span class="tl-time num">'+esc(s.time||"—")+'</span><div><div class="row-title">'+esc(s.activity)+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div></div>').join("") + '</div>';
+      html += '<div class="timeline">' + daySched.slice(0,6).map(s => { const st = schedTypeOf(s); const ic = st.icon();
+        return '<div class="tl-item" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(s.time||"—")+'</span><div style="flex:1"><div class="row-title">'+(ic?'<span class="sched-ic" style="color:'+st.color+'">'+ic+'</span>':"")+esc(s.activity)+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div></div>'; }).join("") + '</div>';
     } else html += '<p style="color:var(--muted);margin:8px 0 0">Nothing scheduled for this day yet.</p>';
     html += '</div>';
 
     // weather + quick facts card
-    html += '<div style="display:flex;flex-direction:column;gap:16px">';
+    html += '<div style="display:flex;flex-direction:column;gap:16px;height:100%">';
     const hasForecast = wx && (wx.high || wx.low || wx.condition);
     if (hasForecast) {
       const okind = condIcon(wx.condition); const osc = wxScene(okind);
-      html += '<div class="card card-pad wx-scened" style="min-height:150px;background:'+osc.grad+';color:'+osc.ink+'">' +
+      html += '<div class="card card-pad wx-scened" style="flex:1;min-height:150px;background:'+osc.grad+';color:'+osc.ink+'">' +
         wxSceneLayer(okind) +
         '<div class="section-title" style="margin-bottom:12px"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>' +
         '<div style="display:flex;align-items:baseline;gap:10px">' +
@@ -1249,7 +1249,7 @@
           '<span class="cond" style="margin-left:auto;font-weight:600">'+esc(wx.condition||"—")+'</span></div>' +
         '<div class="row-sub" style="margin-top:6px">'+esc(fmtDate(wx.date,"long"))+(wx.precip?' · '+esc(wx.precip)+' precip':"")+'</div></div>';
     } else {
-      html += '<div class="card card-pad" id="ovWx" style="min-height:150px">' +
+      html += '<div class="card card-pad" id="ovWx" style="flex:1;min-height:150px">' +
         '<div class="section-title"><h3>Weather</h3><button class="btn sm" data-action="nav" data-section="weather">All days</button></div>' +
         '<p class="row-sub" style="margin:10px 0 0">Loading live conditions…</p></div>';
     }
@@ -1284,7 +1284,7 @@
     const jobRow = (icon, label, sample, pillTxt, tone, section) =>
       '<button class="row-item" data-action="nav" data-section="'+section+'" style="width:100%;text-align:left;background:none;border-left:none;border-right:none;border-top:none;cursor:pointer">' +
         '<span style="color:var(--accent);display:inline-flex;width:20px;flex:none">'+icon+'</span>' +
-        '<span class="row-main"><span class="row-title" style="font-weight:500">'+esc(label)+'</span>'+(sample?'<span class="row-sub">'+esc(sample)+'</span>':"")+'</span>' +
+        '<div class="row-main"><div class="row-title" style="font-weight:500">'+esc(label)+'</div>'+(sample?'<div class="row-sub" style="margin-top:2px">'+esc(sample)+'</div>':"")+'</div>' +
         '<span class="pill '+tone+'">'+esc(pillTxt)+'</span></button>';
     const preview = (arr, field) => { const names = arr.map(x=>x[field]); const head = names.slice(0,3).join(", "); return head + (names.length>3?" +"+(names.length-3)+" more":""); };
 
