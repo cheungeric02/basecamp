@@ -326,7 +326,7 @@
   .wx-sun-disc { position: absolute; top: 14%; right: 12%; width: 52px; height: 52px; border-radius: 50%;
     background: radial-gradient(circle at 40% 38%, #FFF0B8, #FFC23E 72%); box-shadow: 0 0 26px 6px rgba(255,206,90,.55); animation: wxPulse 4s ease-in-out infinite; }
   .wx-sun-sm { width: 38px; height: 38px; top: 14%; left: 12%; right: auto; }
-  .wx-sun-rays { position: absolute; top: -22px; right: -22px; width: 96px; height: 96px; border-radius: 50%;
+  .wx-sun-rays { position: absolute; top: calc(14% - 22px); right: calc(12% - 22px); width: 96px; height: 96px; border-radius: 50%;
     background: repeating-conic-gradient(from 0deg, rgba(255,240,180,.5) 0deg 5deg, transparent 5deg 45deg);
     -webkit-mask: radial-gradient(circle, transparent 34px, #000 35px); mask: radial-gradient(circle, transparent 34px, #000 35px);
     animation: wxSpin 22s linear infinite; }
@@ -2324,7 +2324,7 @@
     let el = '<div class="wx-scene" aria-hidden="true">';
     if (kind==="sun") el += '<span class="wx-sun-rays"></span><span class="wx-sun-disc"></span>';
     else if (kind==="moon") el += '<span class="wx-moon"></span><span class="wx-tw" style="left:20%;top:30%"></span><span class="wx-tw" style="left:30%;top:62%;animation-delay:1s"></span><span class="wx-tw" style="left:13%;top:70%;animation-delay:.5s"></span>';
-    else if (kind==="partly") el += '<span class="wx-sun-rays" style="top:-22px;left:-22px;right:auto"></span><span class="wx-sun-disc wx-sun-sm"></span>' + puff("42%","46%",72,26,0) + puff("60%","62%",54,32,4);
+    else if (kind==="partly") el += '<span class="wx-sun-rays" style="top:calc(14% - 29px);left:calc(12% - 29px);right:auto"></span><span class="wx-sun-disc wx-sun-sm"></span>' + puff("42%","46%",72,26,0) + puff("60%","62%",54,32,4);
     else if (kind==="cloud") el += puff("6%","22%",84,34,0) + puff("46%","40%",98,44,3) + puff("28%","58%",72,38,7);
     else if (kind==="rain") el += puff("8%","14%",84,36,0) + puff("50%","18%",72,42,4) + wxRainLines(12);
     else if (kind==="snow") el += puff("10%","14%",80,38,0) + puff("52%","18%",66,44,3) + wxSnowDots(14);
