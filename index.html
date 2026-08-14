@@ -1331,7 +1331,7 @@
         const filled = w.high || w.low || w.condition;
         const kind = filled ? condIcon(w.condition) : null;
         const sc = kind ? wxScene(kind) : null;
-        const cardStyle = sc ? 'text-align:left;cursor:pointer;min-height:158px;background:'+sc.grad+';color:'+sc.ink : 'text-align:left;cursor:pointer;min-height:158px;color:inherit';
+        const cardStyle = sc ? 'text-align:left;cursor:pointer;min-height:200px;background:'+sc.grad+';color:'+sc.ink : 'text-align:left;cursor:pointer;min-height:200px;color:inherit';
         html += '<button class="card wx'+(sc?' wx-scened':'')+'" data-action="edit-weather" data-id="'+d+'" style="'+cardStyle+'">' +
           (sc ? wxSceneLayer(kind) : '') +
           '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
