@@ -175,9 +175,10 @@
   .stat .val { font-family: var(--font-display); font-size: 2rem; line-height: 1.1; margin-top: 6px; letter-spacing: -.02em; }
   .stat .sub { font-size: .82rem; color: var(--muted); margin-top: 4px; }
 
-  .cd-top { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-  .cd-scene { width: 100%; max-width: 232px; margin: 2px auto 0; }
-  .cd-trail { width: 100%; height: auto; display: block; color: var(--ember); }
+  .cd-tile { position: relative; overflow: hidden; min-height: 180px; color: var(--ember); }
+  .cd-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .cd-fg { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .cd-sub { text-transform: none; letter-spacing: 0; margin-top: 4px; }
   .cd-num { font-family: var(--font-display); font-size: 2.4rem; line-height: 1; color: var(--ember); letter-spacing: -.02em; }
   .cd-unit { font-family: var(--font-mono); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
@@ -1191,7 +1192,7 @@
     else if (inProgress) { p = 0.92; lit = true; showFlag = false; }
     else { p = 0.92; lit = false; showFlag = false; }
 
-    const P0 = [16, 104], C = [120, 70], P2 = [196, 92];
+    const P0 = [16, 142], C = [120, 108], P2 = [196, 130];
     const q = t => { const m = 1 - t; return [m*m*P0[0] + 2*m*t*C[0] + t*t*P2[0], m*m*P0[1] + 2*m*t*C[1] + t*t*P2[1]]; };
     const mk = q(p), mx = mk[0].toFixed(1), my = mk[1].toFixed(1);
 
@@ -1220,12 +1221,12 @@
         '<line x1="' + x + '" y1="' + (by - ah) + '" x2="' + x + '" y2="' + (by - ah - 5) + '" stroke="currentColor" stroke-width="2"/>';
     };
 
-    let s = '<svg class="cd-trail" viewBox="0 0 240 120" preserveAspectRatio="xMidYMid meet" aria-hidden="true">';
-    s += '<path d="M0,98 Q70,86 140,92 T240,90 L240,120 L0,120 Z" fill="currentColor" opacity=".09"/>';
-    s += tree(126, 96, 0.7) + tree(150, 92, 1) + tree(224, 94, 0.8);
-    s += '<path d="M16,104 Q120,70 196,92" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"/>';
-    s += fire(170, 108, lit);
-    s += tent(196, 96);
+    let s = '<svg class="cd-bg" viewBox="0 0 240 160" preserveAspectRatio="xMidYMax slice" aria-hidden="true">';
+    s += '<path d="M0,138 Q70,126 140,132 T240,130 L240,160 L0,160 Z" fill="currentColor" opacity=".09"/>';
+    s += tree(126, 134, 0.7) + tree(150, 130, 1) + tree(224, 132, 0.8);
+    s += '<path d="M16,142 Q120,108 196,130" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"/>';
+    s += fire(170, 146, lit);
+    s += tent(196, 134);
     s += '<circle cx="' + mx + '" cy="' + my + '" r="8" fill="currentColor" opacity=".2"/>';
     if (showFlag) {
       s += '<line x1="' + mx + '" y1="' + my + '" x2="' + mx + '" y2="' + (mk[1] - 15).toFixed(1) + '" stroke="currentColor" stroke-width="1.6"/>';
@@ -1288,10 +1289,9 @@
     else if (du > 0) cdUnit = du === 1 ? "day to go" : "days to go";
     else if (dueEnd >= 0) cdUnit = "you’re here";
     else cdUnit = "";
-    const countdownTile = '<div class="card stat tone-ember cd-tile" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px">' +
-      '<div class="cd-top"><span class="cd-num">'+countVal+'</span>'+(cdUnit?'<span class="cd-unit">'+esc(cdUnit)+'</span>':"")+'</div>' +
-      '<div class="cd-scene">'+trailScene(du, dueEnd)+'</div>' +
-      '<div class="label" style="text-transform:none;letter-spacing:0">'+esc(countSub)+'</div>' +
+    const countdownTile = '<div class="card stat tone-ember cd-tile" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-start;text-align:center">' +
+      trailScene(du, dueEnd) +
+      '<div class="cd-fg"><span class="cd-num">'+countVal+'</span>'+(cdUnit?'<span class="cd-unit">'+esc(cdUnit)+'</span>':"")+'<span class="label cd-sub">'+esc(countSub)+'</span></div>' +
     '</div>';
     html += '<div class="grid cols-3 section-block">' +
       countdownTile +
