@@ -201,6 +201,11 @@
   .row-main { flex: 1; min-width: 0; }
   .row-title { font-weight: 500; }
   .row-sub { font-size: .82rem; color: var(--muted); margin-top: 1px; }
+  .tag-cat { display: inline-block; font-size: .64rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--chip, rgba(0,0,0,.06)); border-radius: 6px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
+  .store-input { width: 118px; max-width: 32vw; font: inherit; font-size: .8rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; outline: none; transition: border-color .12s; }
+  .store-input:focus { border-color: var(--accent); }
+  .store-input::placeholder { color: var(--muted); }
+  .store-emo { font-size: .95em; }
   .row-actions { display: flex; gap: 2px; opacity: .55; transition: opacity .12s; }
   .row-item:hover .row-actions { opacity: 1; }
 
@@ -1477,14 +1482,19 @@
       '<button class="btn" data-action="clear-got">Clear checked</button>' + addBtn("add-shop","Add item"));
     if (!trip.shopping.length) return html + emptyState(I.shopping, "Nothing on the list yet. Add supplies and groceries.", "add-shop", "Add first item");
     html += filterBar(trip, "shopping", filterShopping);
-    const cats = {};
-    trip.shopping.forEach(s => { if (!matchFilter(s.assignedIds, filterShopping)) return; const c = s.category||"Other"; (cats[c]=cats[c]||[]).push(s); });
-    const catNames = Object.keys(cats);
-    if (!catNames.length) return html + '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
-    catNames.forEach(cat => {
-      const items = cats[cat];
-      const key = "SHOP:" + cat, isCol = !!collapsedCats[key];
-      html += '<div class="day-head cat-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>'+esc(cat)+'</h4><span class="label">'+items.filter(i=>i.gotIt).length+'/'+items.length+'</span></div>';
+    html += '<datalist id="shopstores">' + knownStores(trip).map(o => '<option value="'+esc(o)+'"></option>').join("") + '</datalist>';
+    const NO_STORE = " nostore";
+    const groups = {};
+    trip.shopping.forEach(s => { if (!matchFilter(s.assignedIds, filterShopping)) return; const st = (s.store||"").trim() || NO_STORE; (groups[st]=groups[st]||[]).push(s); });
+    const storeNames = Object.keys(groups);
+    if (!storeNames.length) return html + '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
+    storeNames.sort((a, b) => { if (a === NO_STORE) return 1; if (b === NO_STORE) return -1; return a.localeCompare(b); });
+    storeNames.forEach(st => {
+      const items = groups[st];
+      const isNo = st === NO_STORE;
+      const label = isNo ? "No store yet" : st;
+      const key = "SHOPSTORE:" + st, isCol = !!collapsedCats[key];
+      html += '<div class="day-head cat-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>'+(isNo?"":'<span class="store-emo">🛒</span> ')+esc(label)+'</h4><span class="label">'+items.filter(i=>i.gotIt).length+'/'+items.length+'</span></div>';
       if (isCol) return;
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
       items.forEach(s => {
@@ -1499,8 +1509,9 @@
           : '<button class="btn sm" data-action="shop-price" data-id="'+s.id+'" style="color:var(--muted)">+ add price</button>';
         html += '<div class="row-item'+(s.gotIt?" done":"")+'">' +
           '<input type="checkbox" class="check" '+(s.gotIt?"checked":"")+' data-action="toggle-shop" data-id="'+s.id+'">' +
-          '<div class="row-main"><div class="row-title">'+esc(s.item)+(s.qty?' <span class="label" style="text-transform:none;letter-spacing:0">· '+esc(s.qty)+'</span>':"")+'</div>' +
+          '<div class="row-main"><div class="row-title">'+esc(s.item)+(s.qty?' <span class="label" style="text-transform:none;letter-spacing:0">· '+esc(s.qty)+'</span>':"")+(s.category?' <span class="tag-cat">'+esc(s.category)+'</span>':"")+'</div>' +
           (sub.length?'<div class="row-sub">'+sub.join(" · ")+'</div>':"") + '</div>' +
+          storeControl(trip, s) +
           assignControl(trip, s, s.assignedIds, "addassign-shop", "removeassign-shop", "+ Assign") +
           priceCtl +
           rowActions("edit-shop","del-shop",s.id) + '</div>';
@@ -1509,11 +1520,16 @@
     });
     return html;
   }
+  function knownStores(trip) { return Array.from(new Set((trip.shopping || []).map(s => (s.store || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)); }
+  function storeControl(trip, s) {
+    return '<input class="store-input" type="text" list="shopstores" data-action="set-shop-store" data-id="' + s.id + '" value="' + esc(s.store || "") + '" placeholder="+ Store" autocomplete="off">';
+  }
   function shopFields(trip) {
     const cats = ["Food","Drinks","Camp Supplies","Personal","Cooking Gear","Other"];
     return [
       { key:"item", label:"Item", type:"text", required:true, placeholder:"e.g. Charcoal" },
       { key:"qty", label:"Quantity", type:"text", placeholder:"e.g. 2 bags", row:true },
+      { key:"store", label:"Store", type:"datalist", options: (t) => knownStores(t), placeholder:"e.g. Costco, Metro, Canadian Tire" },
       { key:"category", label:"Category", type:"select", options: cats },
       { key:"mealRef", label:"For meal (optional)", type:"mealselect" },
     ];
@@ -2239,9 +2255,10 @@
     "del-meal-ing": (el) => { const t = activeTrip(); t.shopping = t.shopping.filter(s => s.id !== el.dataset.id); save(); render(); },
 
     // shopping
-    "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food"}, onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); t.shopping.push({ id:uid(), item:v.item, qty:v.qty, category:v.category, mealId:v.mealRef||"", forMeal:m?m.name:"", gotIt:false, assignedIds:[] }); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
-    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); const mealRef = s.mealId || (t.meals.find(m=>m.name===s.forMeal)||{}).id || ""; openForm({ title:"Edit item", fields: shopFields(t), values: Object.assign({}, s, { mealRef: mealRef }), onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); s.item=v.item; s.qty=v.qty; s.category=v.category; s.mealId=v.mealRef||""; s.forMeal=m?m.name:""; save(); logActivity("edited shopping item “"+s.item+"”"); render(); }, onDelete: () => delItem("shopping", s.id, "Remove this item?") }); },
+    "add-shop": () => { const t = activeTrip(); openForm({ title:"Add item", fields: shopFields(t), values:{category:"Food"}, onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); t.shopping.push({ id:uid(), item:v.item, qty:v.qty, category:v.category, store:v.store||"", mealId:v.mealRef||"", forMeal:m?m.name:"", gotIt:false, assignedIds:[] }); save(); logActivity("added “"+v.item+"” to shopping"); render(); toast("Added to list"); } }); },
+    "edit-shop": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); const mealRef = s.mealId || (t.meals.find(m=>m.name===s.forMeal)||{}).id || ""; openForm({ title:"Edit item", fields: shopFields(t), values: Object.assign({}, s, { mealRef: mealRef }), onSubmit: v => { const m = t.meals.find(x=>x.id===v.mealRef); s.item=v.item; s.qty=v.qty; s.category=v.category; s.store=v.store||""; s.mealId=v.mealRef||""; s.forMeal=m?m.name:""; save(); logActivity("edited shopping item “"+s.item+"”"); render(); }, onDelete: () => delItem("shopping", s.id, "Remove this item?") }); },
     "del-shop": (el) => delItem("shopping", el.dataset.id, "Remove this item?"),
+    "set-shop-store": (el) => { const t = activeTrip(); const s = findById(t.shopping, el.dataset.id); if (!s) return; const v = el.value.trim(); if (v === (s.store||"")) return; s.store = v; save(); logActivity("set store for “"+s.item+"”" + (v?" to "+v:"")); render(); },
     "toggle-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); s.gotIt = el.checked; save(); logActivity((el.checked?"bought":"un-checked")+" “"+s.item+"”"); render(); if (el.checked && !(Number(s.price) > 0) && activeTrip().people.length) openShopPrice(s); },
     "shop-price": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (s) openShopPrice(s); },
     "assign-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (p) { p.personId = el.value; save(); logActivity("set “"+p.item+"” to be brought by "+(personName(activeTrip(),el.value)||"nobody")); render(); } },
@@ -2842,7 +2859,8 @@
     const actEl = e.target.closest("[data-action]");
     if (!actEl) return;
     if (actEl.tagName === "SELECT") { const fn = ACTIONS[actEl.dataset.action]; if (fn) fn(actEl); return; }
-    if (actEl.matches('input[type="checkbox"]')) { const fn = ACTIONS[actEl.dataset.action]; if (fn) fn(actEl); }
+    if (actEl.matches('input[type="checkbox"]')) { const fn = ACTIONS[actEl.dataset.action]; if (fn) fn(actEl); return; }
+    if (actEl.matches('input.store-input')) { const fn = ACTIONS[actEl.dataset.action]; if (fn) fn(actEl); }
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("overlay").classList.contains("open")) closeModal(); });
 
@@ -2855,7 +2873,7 @@
     if (typeof t.notes !== "string") t.notes = "";
     if (!t.personalPacking || typeof t.personalPacking !== "object" || Array.isArray(t.personalPacking)) t.personalPacking = {};
     (t.packing || []).forEach(p => { if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; });
-    (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
+    (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (typeof s.store !== "string") s.store = ""; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
     (t.schedule || []).forEach(s => { if (!s.type) s.type = schedTypeGuess(s.activity); });
   }
   function schedTypeGuess(activity) {
