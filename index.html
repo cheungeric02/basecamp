@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2F5A49">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Basecamp">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -337,6 +343,12 @@
   .wx-flash { position: absolute; inset: 0; background: rgba(255,255,255,.8); opacity: 0; animation: wxFlash 4s steps(1,end) infinite; }
   .wx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 7px; border-radius: 999px; }
   .wx-chip .wx-ic { width: 20px; height: 20px; }
+  .sun-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border); }
+  .sun-row:first-child { border-top: none; }
+  .sun-day { flex: 1; font-weight: 500; }
+  .sun-t { display: inline-flex; align-items: center; gap: 6px; min-width: 92px; font-variant-numeric: tabular-nums; }
+  .sun-ic { font-size: 1.05rem; line-height: 1; }
+  @media (max-width: 420px) { .sun-t { min-width: 82px; } }
 
   /* schedule timeline */
   .timeline { position: relative; padding-left: 22px; }
@@ -1143,7 +1155,7 @@
     if (ui.section === "notes") wireNotes(trip);
     if (ui.section === "meals") wireMeals();
     if (ui.section === "weather" || ui.section === "overview") loadLiveWeather();
-    if (ui.section === "weather") loadInfoForecast();
+    if (ui.section === "weather") { loadInfoForecast(); loadSunTimes(); }
     if (ui.section === "packing") loadPackingWx();
     if (ui.section === "schedule") loadScheduleWx();
     if (ui.section === "todo") loadTodoDiscovery();
@@ -1317,6 +1329,11 @@
     let html = pageHead("Info", "", "");
     // Live weather
     html += '<div class="card card-pad" id="liveWx" style="margin-bottom:18px">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading current conditions…</p>')+'</div>';
+
+    // Sunrise / sunset
+    html += '<div class="card card-pad" id="sunTimes" style="margin-bottom:18px">' +
+      '<div class="section-title" style="margin-bottom:6px"><div><h3>Daylight</h3><div class="label">Sunrise &amp; sunset</div></div></div>' +
+      '<div id="sunTimesBody"><p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Loading sun times…</p></div></div>';
 
     // Daily forecast (directly under live weather)
     html += '<div class="section-title"><h3>Daily forecast</h3></div>';
@@ -1653,6 +1670,43 @@
         (w.pp != null ? '<div class="row-sub" style="margin-top:6px">Precip: '+w.pp+'%</div>' : "") +
         '<div class="row-sub">● Live · tap to override</div>';
     });
+  }
+  function fmtClock(iso) {
+    const m = /T(\d{2}):(\d{2})/.exec(iso || ""); if (!m) return "—";
+    let h = parseInt(m[1], 10); const mi = m[2]; const ap = h < 12 ? "AM" : "PM";
+    h = h % 12; if (h === 0) h = 12;
+    return h + ":" + mi + " " + ap;
+  }
+  let sunCache = null, sunKey = "";
+  async function loadSunTimes(force) {
+    const body = document.getElementById("sunTimesBody"); if (!body) return;
+    const t = activeTrip(); const days = tripDays(t);
+    if (!days.length) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Add trip dates to see sun times.</p>'; return; }
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    if (!(lat && lon)) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Set a location to see sun times.</p>'; return; }
+    const key = lat.toFixed(3) + "," + lon.toFixed(3);
+    let daily = (sunCache && sunKey === key && !force) ? sunCache : null;
+    if (!daily) {
+      try {
+        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=sunrise,sunset&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
+        const j = await r.json();
+        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; sunCache = daily; sunKey = key; }
+      } catch (e) {}
+    }
+    if (!daily || !daily.time) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Sun times unavailable right now.</p>'; return; }
+    const map = {}; daily.time.forEach((d, i) => { map[d] = { rise: daily.sunrise ? daily.sunrise[i] : null, set: daily.sunset ? daily.sunset[i] : null }; });
+    let rows = "";
+    days.forEach(d => {
+      const s = map[d];
+      const rise = s && s.rise ? fmtClock(s.rise) : "—";
+      const set = s && s.set ? fmtClock(s.set) : "—";
+      rows += '<div class="sun-row">' +
+        '<span class="sun-day">' + esc(fmtDate(d, "dow")) + ' · ' + esc(fmtDate(d, "md")) + '</span>' +
+        '<span class="sun-t"><span class="sun-ic">🌅</span>' + rise + '</span>' +
+        '<span class="sun-t"><span class="sun-ic">🌇</span>' + set + '</span></div>';
+    });
+    body.innerHTML = rows || '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Sun times not out yet for these dates.</p>';
   }
   function schedFields(trip) {
     const days = tripDays(trip);
@@ -2850,6 +2904,14 @@
     } catch (e) {
       console.error("[Basecamp] Firebase init failed:", e);
     }
+  }
+</script>
+<script>
+  /* Service worker — offline support so the trip loads with no signal */
+  if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function (e) { console.warn("[Basecamp] SW register failed:", e); });
+    });
   }
 </script>
 </body>
