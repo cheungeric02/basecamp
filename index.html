@@ -376,7 +376,7 @@
   .tl-item::before { content: ""; position: absolute; left: -19px; top: 15px; width: 9px; height: 9px;
     border-radius: 50%; background: var(--dot, var(--accent)); border: 2px solid var(--surface); transition: box-shadow .2s; }
   .tl-time { font-family: var(--font-mono); font-size: .82rem; color: var(--accent-ink); font-weight: 600;
-    width: 62px; flex: none; padding-top: 1px; }
+    width: 72px; flex: none; padding-top: 1px; }
   @media (prefers-color-scheme: dark) { .tl-time { color: var(--accent); } }
   :root[data-theme="dark"] .tl-time { color: var(--accent); }
   .sched-ic { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
@@ -1262,7 +1262,7 @@
       '<button class="btn sm" data-action="nav" data-section="schedule">Full schedule</button></div>';
     if (daySched.length) {
       html += '<div class="timeline">' + daySched.slice(0,6).map(s => { const st = schedTypeOf(s); const ic = st.icon();
-        return '<div class="tl-item" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(s.time||"—")+'</span><div style="flex:1"><div class="row-title">'+(ic?'<span class="sched-ic" style="color:'+st.color+'">'+ic+'</span>':"")+esc(s.activity)+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div></div>'; }).join("") + '</div>';
+        return '<div class="tl-item" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(fmt12(s.time))+'</span><div style="flex:1"><div class="row-title">'+(ic?'<span class="sched-ic" style="color:'+st.color+'">'+ic+'</span>':"")+esc(s.activity)+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div></div>'; }).join("") + '</div>';
     } else html += '<p style="color:var(--muted);margin:8px 0 0">Nothing scheduled for this day yet.</p>';
     html += '</div>';
 
@@ -1590,6 +1590,16 @@
     const parts = (time||"00:00").split(":"); d.setHours(Number(parts[0])||0, Number(parts[1])||0, 0, 0);
     return d;
   }
+  // Show times to the user in 12-hour format; they're stored as 24h "HH:MM" so sorting stays correct.
+  function fmt12(t) {
+    if (!t) return "—";
+    const m = /^(\d{1,2}):(\d{2})/.exec(t);
+    if (!m) return t;
+    let h = Number(m[1]); const min = m[2];
+    const ap = h < 12 ? "AM" : "PM";
+    h = h % 12; if (h === 0) h = 12;
+    return h + ":" + min + " " + ap;
+  }
   function secSchedule(trip) {
     let html = pageHead("Daily Schedule", "The plan, hour by hour.", addBtn("add-sched","Add item"));
     const days = tripDays(trip);
@@ -1612,10 +1622,10 @@
       html += '<div class="card card-pad section-block" style="background:var(--ember-soft);border:none;display:flex;gap:22px;flex-wrap:wrap;align-items:center">';
       if (curItem) html += '<div><div class="label" style="color:var(--ember)">● Happening now</div>' +
         '<div class="row-title" style="font-size:1.05rem">'+esc(curItem.activity)+'</div>' +
-        '<div class="row-sub">from '+esc(curItem.time||"—")+'</div></div>';
+        '<div class="row-sub">from '+esc(fmt12(curItem.time))+'</div></div>';
       if (nextItem) html += '<div style="'+(curItem?'border-left:1px solid var(--border-strong);padding-left:22px':'')+'">' +
         '<div class="label">Up next</div><div class="row-title" style="font-size:1.05rem">'+esc(nextItem.activity)+'</div>' +
-        '<div class="row-sub">'+esc(fmtDate(nextItem.day,"dow"))+' · '+esc(nextItem.time||"—")+'</div></div>';
+        '<div class="row-sub">'+esc(fmtDate(nextItem.day,"dow"))+' · '+esc(fmt12(nextItem.time))+'</div></div>';
       html += '</div>';
     }
 
@@ -1640,7 +1650,7 @@
         const mark = s.id===nowId ? '<span class="pill ember" style="margin-left:8px">NOW</span>'
           : (s.id===nextId ? '<span class="pill info" style="margin-left:8px">UP NEXT</span>' : "");
         const cls = "tl-item" + (s.id===nowId?" tl-now":"");
-        html += '<div class="'+cls+'" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(s.time||"—")+'</span>' +
+        html += '<div class="'+cls+'" style="--dot:'+st.color+'"><span class="tl-time num">'+esc(fmt12(s.time))+'</span>' +
           '<div style="flex:1"><div class="row-title">'+(ic?'<span class="sched-ic" style="color:'+st.color+'">'+ic+'</span>':"")+esc(s.activity)+mark+'</div>'+(s.notes?'<div class="row-sub">'+esc(s.notes)+'</div>':"")+'</div>' +
           rowActions("edit-sched","del-sched",s.id) + '</div>';
       });
