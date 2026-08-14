@@ -254,6 +254,9 @@
   .filterbar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 2px 0 18px; }
   .filterbar .flabel { font-family: var(--font-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
   .cat-head { cursor: pointer; user-select: none; }
+  .done-head h4 { color: var(--muted); }
+  .done-head .label { color: var(--muted); }
+  .done-card { opacity: .82; }
   .cat-head .chev { display: inline-flex; transition: transform .15s; color: var(--muted); }
   .cat-head .chev svg { width: 15px; height: 15px; }
   .cat-head.collapsed .chev { transform: rotate(-90deg); }
@@ -1475,49 +1478,62 @@
   }
 
   /* ---------- Shopping ---------- */
+  // A collapsible "Done" section that collects checked-off items at the very bottom of a list.
+  function doneSection(key, count, rowsHtml) {
+    const isCol = !!collapsedCats[key];
+    let h = '<div class="day-head cat-head done-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>Done</h4><span class="label">'+count+'</span></div>';
+    if (isCol) return h;
+    return h + '<div class="card done-card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">'+rowsHtml+'</div></div>';
+  }
+  function renderShopRow(trip, s) {
+    const priced = Number(s.price) > 0;
+    const nSplit = (s.splitAmong && s.splitAmong.length) ? s.splitAmong.length : trip.people.length;
+    const sub = [];
+    if (s.forMeal) sub.push("for " + esc(s.forMeal));
+    if (s.gotIt && priced) sub.push("paid by " + (esc(personName(trip, s.paidBy)) || "someone") + " · split " + nSplit + " way" + (nSplit === 1 ? "" : "s"));
+    let priceCtl = "";
+    if (s.gotIt) priceCtl = priced
+      ? '<button class="pill green" data-action="shop-price" data-id="'+s.id+'" title="Edit price">'+money(s.price)+'</button>'
+      : '<button class="btn sm" data-action="shop-price" data-id="'+s.id+'" style="color:var(--muted)">+ add price</button>';
+    return '<div class="row-item'+(s.gotIt?" done":"")+'">' +
+      '<input type="checkbox" class="check" '+(s.gotIt?"checked":"")+' data-action="toggle-shop" data-id="'+s.id+'">' +
+      '<div class="row-main"><div class="row-title">'+esc(s.item)+(s.qty?' <span class="label" style="text-transform:none;letter-spacing:0">· '+esc(s.qty)+'</span>':"")+(s.category?' <span class="tag-cat">'+esc(s.category)+'</span>':"")+'</div>' +
+      (sub.length?'<div class="row-sub">'+sub.join(" · ")+'</div>':"") + '</div>' +
+      storeControl(trip, s) +
+      assignControl(trip, s, s.assignedIds, "addassign-shop", "removeassign-shop", "+ Assign") +
+      priceCtl +
+      rowActions("edit-shop","del-shop",s.id) + '</div>';
+  }
   function secShopping(trip) {
     const left = trip.shopping.filter(x=>!x.gotIt).length;
     const spent = shoppingSpent(trip);
     let html = pageHead("Shopping List", left+" item"+(left===1?"":"s")+" still to buy"+(spent>0?' · <span class="num">'+money(spent)+'</span> spent so far':"")+".",
-      '<button class="btn" data-action="clear-got">Clear checked</button>' + addBtn("add-shop","Add item"));
+      addBtn("add-shop","Add item"));
     if (!trip.shopping.length) return html + emptyState(I.shopping, "Nothing on the list yet. Add supplies and groceries.", "add-shop", "Add first item");
     html += filterBar(trip, "shopping", filterShopping);
     html += '<datalist id="shopstores">' + knownStores(trip).map(o => '<option value="'+esc(o)+'"></option>').join("") + '</datalist>';
     const NO_STORE = " nostore";
-    const groups = {};
-    trip.shopping.forEach(s => { if (!matchFilter(s.assignedIds, filterShopping)) return; const st = (s.store||"").trim() || NO_STORE; (groups[st]=groups[st]||[]).push(s); });
+    const groups = {}, done = [];
+    trip.shopping.forEach(s => {
+      if (!matchFilter(s.assignedIds, filterShopping)) return;
+      if (s.gotIt) { done.push(s); return; }
+      const st = (s.store||"").trim() || NO_STORE; (groups[st]=groups[st]||[]).push(s);
+    });
     const storeNames = Object.keys(groups);
-    if (!storeNames.length) return html + '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
+    if (!storeNames.length && !done.length) return html + '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
     storeNames.sort((a, b) => { if (a === NO_STORE) return 1; if (b === NO_STORE) return -1; return a.localeCompare(b); });
     storeNames.forEach(st => {
       const items = groups[st];
       const isNo = st === NO_STORE;
       const label = isNo ? "No store yet" : st;
       const key = "SHOPSTORE:" + st, isCol = !!collapsedCats[key];
-      html += '<div class="day-head cat-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>'+(isNo?"":'<span class="store-emo">🛒</span> ')+esc(label)+'</h4><span class="label">'+items.filter(i=>i.gotIt).length+'/'+items.length+'</span></div>';
+      html += '<div class="day-head cat-head'+(isCol?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'"><span class="chev">'+I.chevron+'</span><h4>'+(isNo?"":'<span class="store-emo">🛒</span> ')+esc(label)+'</h4><span class="label">'+items.length+'</span></div>';
       if (isCol) return;
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
-      items.forEach(s => {
-        const priced = Number(s.price) > 0;
-        const nSplit = (s.splitAmong && s.splitAmong.length) ? s.splitAmong.length : trip.people.length;
-        const sub = [];
-        if (s.forMeal) sub.push("for " + esc(s.forMeal));
-        if (s.gotIt && priced) sub.push("paid by " + (esc(personName(trip, s.paidBy)) || "someone") + " · split " + nSplit + " way" + (nSplit === 1 ? "" : "s"));
-        let priceCtl = "";
-        if (s.gotIt) priceCtl = priced
-          ? '<button class="pill green" data-action="shop-price" data-id="'+s.id+'" title="Edit price">'+money(s.price)+'</button>'
-          : '<button class="btn sm" data-action="shop-price" data-id="'+s.id+'" style="color:var(--muted)">+ add price</button>';
-        html += '<div class="row-item'+(s.gotIt?" done":"")+'">' +
-          '<input type="checkbox" class="check" '+(s.gotIt?"checked":"")+' data-action="toggle-shop" data-id="'+s.id+'">' +
-          '<div class="row-main"><div class="row-title">'+esc(s.item)+(s.qty?' <span class="label" style="text-transform:none;letter-spacing:0">· '+esc(s.qty)+'</span>':"")+(s.category?' <span class="tag-cat">'+esc(s.category)+'</span>':"")+'</div>' +
-          (sub.length?'<div class="row-sub">'+sub.join(" · ")+'</div>':"") + '</div>' +
-          storeControl(trip, s) +
-          assignControl(trip, s, s.assignedIds, "addassign-shop", "removeassign-shop", "+ Assign") +
-          priceCtl +
-          rowActions("edit-shop","del-shop",s.id) + '</div>';
-      });
+      items.forEach(s => { html += renderShopRow(trip, s); });
       html += '</div></div>';
     });
+    if (done.length) html += doneSection("SHOPDONE", done.length, done.map(s => renderShopRow(trip, s)).join(""));
     return html;
   }
   function knownStores(trip) { return Array.from(new Set((trip.shopping || []).map(s => (s.store || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)); }
@@ -1911,28 +1927,34 @@
   }
   function packingCategoryBlocks(list, toggleAction, editAction, delAction, trip, showBringing, keyPrefix, filterSet) {
     let html = "";
-    const cats = {};
-    list.forEach(p => { if (filterSet && !matchFilter(p.personIds, filterSet)) return; const c = p.category || "Other"; (cats[c] = cats[c] || []).push(p); });
+    const cats = {}, done = [];
+    list.forEach(p => {
+      if (filterSet && !matchFilter(p.personIds, filterSet)) return;
+      if (p.packed) { done.push(p); return; }
+      const c = p.category || "Other"; (cats[c] = cats[c] || []).push(p);
+    });
     const catNames = Object.keys(cats);
-    if (!catNames.length) return '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
+    if (!catNames.length && !done.length) return '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
+    function packRow(p, showCat) {
+      return '<div class="row-item'+(p.packed?" done":"")+'">' +
+        '<input type="checkbox" class="check" '+(p.packed?"checked":"")+' data-action="'+toggleAction+'" data-id="'+p.id+'">' +
+        '<div class="row-main"><div class="row-title">'+esc(p.item)+(showCat&&p.category?' <span class="tag-cat">'+esc(p.category)+'</span>':"")+'</div></div>' +
+        (showBringing ? assignControl(trip, p, p.personIds, "addbringer-pack", "removebringer-pack", "+ Who's bringing?") : "") +
+        '<div class="row-actions"><button class="icon-btn" data-action="'+editAction+'" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div></div>';
+    }
     catNames.forEach(cat => {
       const items = cats[cat];
       const key = (keyPrefix || "") + ":" + cat;
       const isCollapsed = !!collapsedCats[key];
       html += '<div class="day-head cat-head'+(isCollapsed?" collapsed":"")+'" data-action="toggle-cat" data-key="'+esc(key)+'">' +
         '<span class="chev">'+I.chevron+'</span><h4>'+esc(cat)+'</h4>' +
-        '<span class="label">'+items.filter(i=>i.packed).length+'/'+items.length+'</span></div>';
+        '<span class="label">'+items.length+'</span></div>';
       if (isCollapsed) return;
       html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
-      items.forEach(p => {
-        html += '<div class="row-item'+(p.packed?" done":"")+'">' +
-          '<input type="checkbox" class="check" '+(p.packed?"checked":"")+' data-action="'+toggleAction+'" data-id="'+p.id+'">' +
-          '<div class="row-main"><div class="row-title">'+esc(p.item)+'</div></div>' +
-          (showBringing ? assignControl(trip, p, p.personIds, "addbringer-pack", "removebringer-pack", "+ Who's bringing?") : "") +
-          '<div class="row-actions"><button class="icon-btn" data-action="'+editAction+'" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div></div>';
-      });
+      items.forEach(p => { html += packRow(p, false); });
       html += '</div></div>';
     });
+    if (done.length) html += doneSection((keyPrefix || "") + ":__done__", done.length, done.map(p => packRow(p, true)).join(""));
     return html;
   }
   function progressCard(label, done, total) {
@@ -2186,17 +2208,19 @@
     let html = pageHead("Notes & Checklist", "Free notes plus a pre-departure checklist.", "");
     html += '<div class="grid cols-2" style="align-items:start">';
     // checklist
+    const checkRow = c => '<div class="row-item'+(c.done?" done":"")+'">' +
+      '<input type="checkbox" class="check" '+(c.done?"checked":"")+' data-action="toggle-check" data-id="'+c.id+'">' +
+      '<div class="row-main"><div class="row-title">'+esc(c.text)+'</div></div>' +
+      '<button class="icon-btn" data-action="del-check" data-id="'+c.id+'">'+I.trash+'</button></div>';
+    const activeChecks = trip.checklist.filter(c=>!c.done), doneChecks = trip.checklist.filter(c=>c.done);
     html += '<div><div class="section-title"><h3>Pre-departure checklist</h3><span class="label">'+left+' left</span></div>' +
       '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px" id="checklist">';
-    trip.checklist.forEach(c => {
-      html += '<div class="row-item'+(c.done?" done":"")+'">' +
-        '<input type="checkbox" class="check" '+(c.done?"checked":"")+' data-action="toggle-check" data-id="'+c.id+'">' +
-        '<div class="row-main"><div class="row-title">'+esc(c.text)+'</div></div>' +
-        '<button class="icon-btn" data-action="del-check" data-id="'+c.id+'">'+I.trash+'</button></div>';
-    });
+    activeChecks.forEach(c => { html += checkRow(c); });
     html += '</div><div class="card-pad" style="border-top:1px solid var(--border);display:flex;gap:8px">' +
       '<input type="text" id="newCheck" placeholder="Add a checklist item…" style="flex:1;padding:8px 11px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-2);color:var(--ink)">' +
-      '<button class="btn primary" data-action="add-check">'+I.plus+'</button></div></div></div>';
+      '<button class="btn primary" data-action="add-check">'+I.plus+'</button></div></div>';
+    if (doneChecks.length) html += doneSection("CHECKDONE", doneChecks.length, doneChecks.map(checkRow).join(""));
+    html += '</div>';
     // notes
     html += '<div><div class="section-title"><h3>Notes</h3><span class="label">Auto-saved</span></div>' +
       '<div class="card card-pad"><textarea id="tripNotes" placeholder="Reservation numbers, directions, reminders, anything…" ' +
@@ -2273,7 +2297,6 @@
       render(); },
     "toggle-cat": (el) => { const k = el.dataset.key; collapsedCats[k] = !collapsedCats[k]; render(); },
     "assign-meal": (el) => { const m = findById(activeTrip().meals, el.dataset.id); if (m) { m.personId = el.value; save(); logActivity("set the cook for “"+m.name+"” to "+(personName(activeTrip(),el.value)||"nobody")); render(); } },
-    "clear-got": () => { const t = activeTrip(); const n = t.shopping.filter(x=>x.gotIt).length; if(!n){toast("Nothing checked");return;} confirmDialog("Clear checked items", "Remove "+n+" checked item"+(n===1?"":"s")+" from the list?", () => { t.shopping = t.shopping.filter(x=>!x.gotIt); save(); logActivity("cleared checked shopping items"); render(); toast("Cleared"); }, "Clear"); },
 
     // roles
     "add-role": () => { const t = activeTrip(); openForm({ title:"Add role", fields: roleFields(), onSubmit: v => { t.roles.push(Object.assign({id:uid()}, v)); save(); logActivity("added role “"+v.title+"”"); render(); toast("Role added"); } }); },
