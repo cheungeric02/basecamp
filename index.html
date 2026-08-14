@@ -2844,10 +2844,14 @@
   }
 
   /* ---------- Global event handling ---------- */
+  // Track where the mouse press began so a drag that STARTS inside the dialog
+  // (e.g. selecting text in a field) and ends on the backdrop doesn't close it.
+  let pressStartedOnBackdrop = false;
+  document.addEventListener("mousedown", e => { pressStartedOnBackdrop = (e.target.id === "overlay"); }, true);
   document.addEventListener("click", e => {
     const closeBtn = e.target.closest("[data-close]");
     if (closeBtn) { closeModal(); return; }
-    if (e.target.id === "overlay") { closeModal(); return; }
+    if (e.target.id === "overlay") { if (pressStartedOnBackdrop) closeModal(); return; }
     const actEl = e.target.closest("[data-action]");
     if (!actEl) return;
     // checkboxes and selects are handled on 'change', not click
