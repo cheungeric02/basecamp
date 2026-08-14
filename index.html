@@ -351,23 +351,21 @@
   .wx-flash { position: absolute; inset: 0; background: rgba(255,255,255,.8); opacity: 0; animation: wxFlash 4s steps(1,end) infinite; }
   .wx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 7px; border-radius: 999px; }
   .wx-chip .wx-ic { width: 20px; height: 20px; }
-  .sun-pillbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 2px; }
+  .daylight-card { display: flex; flex-direction: column; transition: background .8s ease, color .8s ease; }
+  .daylight-card #sunTimesBody { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .sun-pillbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
   .sun-pill { appearance: none; -webkit-appearance: none; border: 1.5px solid currentColor; background: transparent;
-    color: inherit; opacity: .5; border-radius: 999px; padding: 3px 12px; font-size: .78rem; font-weight: 600;
+    color: inherit; opacity: .55; border-radius: 999px; padding: 3px 12px; font-size: .78rem; font-weight: 600;
     cursor: pointer; font-family: inherit; line-height: 1.2; transition: opacity .12s ease, background .12s ease; }
-  .sun-pill.on { opacity: 1; border-width: 2px; background: rgba(255,255,255,.22); }
-  .wx-scened .sun-pill.on { background: rgba(255,255,255,.24); }
-  .sun-arc { width: 100%; height: auto; display: block; margin: 4px 0 2px; max-height: 160px; }
-  .sun-orb { filter: drop-shadow(0 0 5px rgba(255,194,62,.85)); transform-box: fill-box; transform-origin: center;
-    animation: wxPulse 4s ease-in-out infinite; }
-  .sun-orb.dim { opacity: .5; filter: none; animation: none; }
-  .sun-ends { display: flex; justify-content: space-between; align-items: flex-end; }
-  .sun-end { display: flex; flex-direction: column; gap: 1px; }
-  .sun-end.r { align-items: flex-end; text-align: right; }
-  .sun-eic { font-size: 1.2rem; line-height: 1; }
-  .sun-etime { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-  .sun-elabel { font-size: .7rem; opacity: .72; text-transform: uppercase; letter-spacing: .05em; }
-  .sun-status { margin-top: 12px; font-size: .86rem; opacity: .92; font-weight: 500; }
+  .sun-pill.on { opacity: 1; border-width: 2px; background: var(--sky-panel-on, rgba(255,255,255,.24)); }
+  .sky-bar { position: relative; height: 12px; border-radius: 999px; background: var(--sky-line, rgba(0,0,0,.16)); margin: 2px 2px 9px; }
+  .sky-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: linear-gradient(90deg, #FFB23E, #FFD98A); }
+  .sky-bar-dot { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: #FFC23E;
+    transform: translate(-50%, -50%); box-shadow: 0 0 0 3px rgba(255,255,255,.6), 0 0 9px rgba(255,194,62,.95); }
+  .sky-bar-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .sky-bar-labels .sky-time { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .sky-bar-labels .sky-hours { font-size: .78rem; opacity: .82; font-weight: 500; text-align: center; }
+  .sky-status { margin-top: 12px; font-size: .86rem; opacity: .92; font-weight: 500; }
 
   /* schedule timeline */
   .timeline { position: relative; padding-left: 22px; }
@@ -1350,7 +1348,7 @@
     html += '<div class="card card-pad" id="liveWx" style="margin-bottom:18px">'+liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Loading current conditions…</p>')+'</div>';
 
     // Sunrise / sunset
-    html += '<div class="card card-pad" id="sunTimes" style="margin-bottom:18px">' +
+    html += '<div class="card card-pad daylight-card" id="sunTimes" style="margin-bottom:18px">' +
       '<div class="section-title" style="margin-bottom:6px"><div><h3>Daylight</h3><div class="label">Sunrise &amp; sunset</div></div></div>' +
       '<div id="sunTimesBody"><p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Loading sun times…</p></div></div>';
 
@@ -1735,49 +1733,76 @@
   function sunMin(iso) { const m = /T(\d{2}):(\d{2})/.exec(iso || ""); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
   function sunDur(mins) { mins = Math.max(0, Math.round(mins)); const h = Math.floor(mins / 60), m = mins % 60; return (h ? h + "h " : "") + m + "m"; }
   function sunPillLabel(d) { return fmtDate(d, "dow").slice(0, 3) + " " + parseInt(d.slice(8), 10); }
-  function sunDayKind(date) {
-    const c = packWxCache || schedWxCache;
-    if (c && c.time && c.weather_code) { const i = c.time.indexOf(date); if (i >= 0 && c.weather_code[i] != null) { return wmoInfo(c.weather_code[i]).icon || "cloud"; } }
-    const t = activeTrip(); const w = (t.weather || []).find(x => x.date === date);
-    if (w && w.condition) return condIcon(w.condition);
-    return null;
-  }
-  function sunArcSvg(f, tSun, dim, arcColor, sunColor) {
-    const P0 = [24, 96], C = [160, -48], P2 = [296, 96];
-    const q = (t) => { const mt = 1 - t; return [mt * mt * P0[0] + 2 * mt * t * C[0] + t * t * P2[0], mt * mt * P0[1] + 2 * mt * t * C[1] + t * t * P2[1]]; };
-    const sp = q(tSun); const p = Math.round(f * 100); const d = "M24,96 Q160,-48 296,96";
-    let s = '<svg class="sun-arc" viewBox="0 0 320 108" preserveAspectRatio="xMidYMid meet" aria-hidden="true">';
-    s += '<line x1="20" y1="96" x2="300" y2="96" stroke="' + arcColor + '" stroke-opacity=".28" stroke-width="2" stroke-linecap="round"/>';
-    s += '<path d="' + d + '" fill="none" stroke="' + arcColor + '" stroke-opacity=".30" stroke-width="4" stroke-linecap="round"/>';
-    if (p > 0) s += '<path d="' + d + '" fill="none" stroke="' + arcColor + '" stroke-width="4" stroke-linecap="round" pathLength="100" stroke-dasharray="' + p + ' 200"/>';
-    s += '<circle class="sun-orb' + (dim ? ' dim' : '') + '" cx="' + sp[0].toFixed(1) + '" cy="' + sp[1].toFixed(1) + '" r="9" fill="' + sunColor + '"/>';
-    return s + '</svg>';
+  // Sky palette that shifts through the day. nowMin = current clock minutes; rise/set frame the daylight window.
+  function skyGradient(nowMin, riseMin, setMin) {
+    const noon = (riseMin + setMin) / 2;
+    // [minute, [topRGB, bottomRGB]] anchors from midnight to midnight.
+    const anchors = [
+      [0,          [[10,15,36],[27,38,71]]],
+      [riseMin-55, [[16,22,46],[34,44,84]]],
+      [riseMin,    [[46,55,110],[228,150,110]]],
+      [riseMin+55, [[120,168,214],[224,235,244]]],
+      [noon,       [[62,134,212],[196,226,245]]],
+      [setMin-65,  [[92,120,180],[244,180,110]]],
+      [setMin,     [[52,52,100],[214,110,64]]],
+      [setMin+50,  [[16,22,46],[30,40,74]]],
+      [1440,       [[10,15,36],[27,38,71]]]
+    ];
+    let a = anchors[0], b = anchors[anchors.length-1];
+    for (let i = 0; i < anchors.length-1; i++) { if (nowMin >= anchors[i][0] && nowMin <= anchors[i+1][0]) { a = anchors[i]; b = anchors[i+1]; break; } }
+    let f = (nowMin - a[0]) / ((b[0] - a[0]) || 1); f = Math.max(0, Math.min(1, f));
+    const mix = (c1, c2) => [0,1,2].map(k => Math.round(c1[k] + (c2[k]-c1[k]) * f));
+    const top = mix(a[1][0], b[1][0]), bot = mix(a[1][1], b[1][1]);
+    const rgb = c => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    const avg = [0,1,2].map(k => (top[k] + bot[k]) / 2);
+    const lum = (0.299*avg[0] + 0.587*avg[1] + 0.114*avg[2]) / 255;
+    const dark = lum > 0.55; // bright sky -> dark ink
+    return {
+      grad: 'linear-gradient(160deg,' + rgb(top) + ',' + rgb(bot) + ')',
+      ink: dark ? '#12263b' : '#F3EFE8',
+      panelOn: dark ? 'rgba(0,0,0,.14)' : 'rgba(255,255,255,.26)',
+      line: dark ? 'rgba(18,38,59,.18)' : 'rgba(255,255,255,.30)'
+    };
   }
   function renderSunCard() {
     const body = document.getElementById("sunTimesBody"); if (!body || !sunData) return;
     if (!(sunSel && sunData[sunSel])) sunSel = sunDays[0];
     const s = sunData[sunSel] || {};
-    const kind = sunDayKind(sunSel); const sc = kind ? wxScene(kind) : null;
-    const arcColor = sc ? sc.ink : "var(--accent)"; const sunColor = "#FFC23E";
     const riseMin = sunMin(s.rise), setMin = sunMin(s.set);
-    let f = 1, tSun = 0.5, dim = false, status = "";
+    const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
     const isToday = sunSel === todayISO();
-    if (riseMin == null || setMin == null) { f = 1; tSun = 0.5; status = ""; }
-    else if (isToday) {
-      const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
-      if (nowMin < riseMin) { f = 0; tSun = 0; dim = true; status = "☀ Sunrise in " + sunDur(riseMin - nowMin); }
-      else if (nowMin > setMin) { f = 1; tSun = 1; dim = true; status = "The sun has set for today"; }
-      else { f = (nowMin - riseMin) / (setMin - riseMin); tSun = f; status = "☀ Sunset in " + sunDur(setMin - nowMin); }
-    } else { f = 1; tSun = 0.5; status = sunDur(setMin - riseMin) + " of daylight"; }
+
+    // Live progress fill + moving marker only when the selected day is today.
+    // Other days show the full daylight span filled, with no live dot.
+    let fill = 100, showDot = false, status = "";
+    if (riseMin != null && setMin != null && isToday) {
+      const daylight = Math.max(1, setMin - riseMin);
+      if (nowMin < riseMin) { fill = 0; status = "Sunrise in " + sunDur(riseMin - nowMin); }
+      else if (nowMin > setMin) { fill = 100; status = "The sun has set for today"; }
+      else { fill = (nowMin - riseMin) / daylight * 100; showDot = true; status = "Sunset in " + sunDur(setMin - nowMin); }
+    }
+    const sky = (riseMin != null && setMin != null) ? skyGradient(nowMin, riseMin, setMin) : null;
+
     const pills = sunDays.map(d => '<button type="button" class="sun-pill' + (d === sunSel ? ' on' : '') + '" data-sunday="' + esc(d) + '">' + esc(sunPillLabel(d)) + '</button>').join("");
     const riseT = s.rise ? fmtClock(s.rise) : "—", setT = s.set ? fmtClock(s.set) : "—";
-    const ends = '<div class="sun-ends">' +
-      '<div class="sun-end"><span class="sun-eic">🌅</span><span class="sun-etime">' + riseT + '</span><span class="sun-elabel">Sunrise</span></div>' +
-      '<div class="sun-end r"><span class="sun-eic">🌇</span><span class="sun-etime">' + setT + '</span><span class="sun-elabel">Sunset</span></div></div>';
-    body.innerHTML = '<div class="sun-pillbar">' + pills + '</div>' + sunArcSvg(f, tSun, dim, arcColor, sunColor) + ends +
-      (status ? '<div class="sun-status">' + esc(status) + '</div>' : "");
+    const hours = (riseMin != null && setMin != null) ? sunDur(Math.max(0, setMin - riseMin)) : "—";
+    const bar = '<div class="sky-bar"><div class="sky-bar-fill" style="width:' + fill.toFixed(1) + '%"></div>' +
+      (showDot ? '<div class="sky-bar-dot" style="left:' + fill.toFixed(1) + '%"></div>' : '') + '</div>' +
+      '<div class="sky-bar-labels"><span class="sky-time">' + riseT + '</span>' +
+      '<span class="sky-hours">' + esc(hours) + ' of daylight</span>' +
+      '<span class="sky-time">' + setT + '</span></div>';
+    body.innerHTML = '<div class="sun-pillbar">' + pills + '</div>' + bar +
+      (status ? '<div class="sky-status">' + esc(status) + '</div>' : "");
+
     const card = document.getElementById("sunTimes");
-    if (card) { if (sc) { card.classList.add("wx-scened"); card.style.background = sc.grad; card.style.color = sc.ink; } else { card.classList.remove("wx-scened"); card.style.background = ""; card.style.color = ""; } }
+    if (card) {
+      if (sky) {
+        card.classList.add("wx-scened");
+        card.style.background = sky.grad; card.style.color = sky.ink;
+        card.style.setProperty("--sky-panel-on", sky.panelOn);
+        card.style.setProperty("--sky-line", sky.line);
+      } else { card.classList.remove("wx-scened"); card.style.background = ""; card.style.color = ""; }
+    }
     body.querySelectorAll(".sun-pill").forEach(b => b.addEventListener("click", function () { sunSel = b.getAttribute("data-sunday"); renderSunCard(); }));
   }
   async function loadSunTimes(force) {
