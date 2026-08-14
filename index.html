@@ -175,11 +175,9 @@
   .stat .val { font-family: var(--font-display); font-size: 2rem; line-height: 1.1; margin-top: 6px; letter-spacing: -.02em; }
   .stat .sub { font-size: .82rem; color: var(--muted); margin-top: 4px; }
 
-  .cd-ring { position: relative; width: 120px; height: 120px; margin: 2px auto 0; }
-  .cd-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-  .cd-track { fill: none; stroke: var(--surface-2); stroke-width: 9; }
-  .cd-arc { fill: none; stroke: var(--ember); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset .7s ease; }
-  .cd-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .cd-top { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .cd-scene { width: 100%; max-width: 232px; margin: 2px auto 0; }
+  .cd-trail { width: 100%; height: auto; display: block; color: var(--ember); }
   .cd-num { font-family: var(--font-display); font-size: 2.4rem; line-height: 1; color: var(--ember); letter-spacing: -.02em; }
   .cd-unit { font-family: var(--font-mono); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
@@ -1182,6 +1180,61 @@
   /* =========================================================
      SECTIONS
   ========================================================= */
+  // A little "trail to camp" scene for the countdown tile. The hiker marker
+  // sits farther along the path as the trip nears; the campfire lights up in
+  // the final stretch. Ember-toned parts use currentColor (set on .cd-trail).
+  function trailScene(du, dueEnd) {
+    const inProgress = (du !== null && du <= 0 && dueEnd >= 0);
+    let p, lit, showFlag;
+    if (du === null) { p = 0.05; lit = false; showFlag = false; }
+    else if (du > 0) { p = Math.max(0.05, Math.min(0.82, (30 - du) / 30)); lit = du <= 3; showFlag = true; }
+    else if (inProgress) { p = 0.92; lit = true; showFlag = false; }
+    else { p = 0.92; lit = false; showFlag = false; }
+
+    const P0 = [16, 104], C = [120, 70], P2 = [196, 92];
+    const q = t => { const m = 1 - t; return [m*m*P0[0] + 2*m*t*C[0] + t*t*P2[0], m*m*P0[1] + 2*m*t*C[1] + t*t*P2[1]]; };
+    const mk = q(p), mx = mk[0].toFixed(1), my = mk[1].toFixed(1);
+
+    const tree = (x, by, sc) => {
+      const h = 26 * sc, w = 18 * sc;
+      const tri = (cy, ww, hh) => '<path d="M' + x + ',' + (cy - hh) + ' L' + (x - ww) + ',' + cy + ' L' + (x + ww) + ',' + cy + ' Z" fill="#3F7D4E"/>';
+      return '<rect x="' + (x - 1.4) + '" y="' + (by - 3) + '" width="2.8" height="6" fill="#6B4A2E"/>' +
+        tri(by - 1, w * 0.55, h * 0.5) + tri(by - 1 - h * 0.32, w * 0.45, h * 0.5) + tri(by - 1 - h * 0.62, w * 0.34, h * 0.5);
+    };
+    const fire = (x, by, on) => {
+      let f = '<line x1="' + (x - 7) + '" y1="' + by + '" x2="' + (x + 7) + '" y2="' + (by - 4) + '" stroke="#7A5230" stroke-width="3" stroke-linecap="round"/>' +
+        '<line x1="' + (x - 7) + '" y1="' + (by - 4) + '" x2="' + (x + 7) + '" y2="' + by + '" stroke="#7A5230" stroke-width="3" stroke-linecap="round"/>';
+      if (on) {
+        f += '<path d="M' + x + ',' + (by - 20) + ' C' + (x - 8) + ',' + (by - 10) + ' ' + (x - 5) + ',' + (by - 2) + ' ' + x + ',' + (by - 3) +
+          ' C' + (x + 5) + ',' + (by - 2) + ' ' + (x + 8) + ',' + (by - 10) + ' ' + x + ',' + (by - 20) + ' Z" fill="#FF9E42"/>';
+        f += '<path d="M' + x + ',' + (by - 13) + ' C' + (x - 4) + ',' + (by - 8) + ' ' + (x - 2) + ',' + (by - 4) + ' ' + x + ',' + (by - 4) +
+          ' C' + (x + 2) + ',' + (by - 4) + ' ' + (x + 4) + ',' + (by - 8) + ' ' + x + ',' + (by - 13) + ' Z" fill="#FFD24D"/>';
+      }
+      return f;
+    };
+    const tent = (x, by) => {
+      const hw = 22, ah = 30;
+      return '<path d="M' + x + ',' + (by - ah) + ' L' + (x - hw) + ',' + by + ' L' + (x + hw) + ',' + by + ' Z" fill="currentColor"/>' +
+        '<path d="M' + x + ',' + (by - ah) + ' L' + (x + hw) + ',' + by + ' L' + x + ',' + by + ' Z" fill="rgba(0,0,0,.16)"/>' +
+        '<path d="M' + x + ',' + (by - ah + 7) + ' L' + (x - 7) + ',' + by + ' L' + (x + 7) + ',' + by + ' Z" fill="rgba(0,0,0,.3)"/>' +
+        '<line x1="' + x + '" y1="' + (by - ah) + '" x2="' + x + '" y2="' + (by - ah - 5) + '" stroke="currentColor" stroke-width="2"/>';
+    };
+
+    let s = '<svg class="cd-trail" viewBox="0 0 240 120" preserveAspectRatio="xMidYMid meet" aria-hidden="true">';
+    s += '<path d="M0,98 Q70,86 140,92 T240,90 L240,120 L0,120 Z" fill="currentColor" opacity=".09"/>';
+    s += tree(126, 96, 0.7) + tree(150, 92, 1) + tree(224, 94, 0.8);
+    s += '<path d="M16,104 Q120,70 196,92" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"/>';
+    s += fire(170, 108, lit);
+    s += tent(196, 96);
+    s += '<circle cx="' + mx + '" cy="' + my + '" r="8" fill="currentColor" opacity=".2"/>';
+    if (showFlag) {
+      s += '<line x1="' + mx + '" y1="' + my + '" x2="' + mx + '" y2="' + (mk[1] - 15).toFixed(1) + '" stroke="currentColor" stroke-width="1.6"/>';
+      s += '<path d="M' + mx + ',' + (mk[1] - 15).toFixed(1) + ' l8,3 l-8,3 z" fill="currentColor"/>';
+    }
+    s += '<circle cx="' + mx + '" cy="' + my + '" r="4.5" fill="currentColor" stroke="#fff" stroke-width="1.6"/>';
+    return s + '</svg>';
+  }
+
   function secOverview(trip) {
     const days = tripDays(trip);
     const du = daysUntil(trip.startDate);
@@ -1229,19 +1282,15 @@
       mealTile = '<div class="card stat tone-info"><div class="label">Upcoming meal</div>' +
         '<div class="val" style="font-size:1.35rem;margin-top:8px;color:var(--muted)">—</div><div class="sub">No meals planned yet</div></div>';
     }
-    // countdown ring
-    let cdFrac = 0, cdUnit = "";
-    if (du === null) { cdFrac = 0; cdUnit = ""; }
-    else if (du > 0) { cdFrac = Math.max(0.02, Math.min(1, du / 30)); cdUnit = du === 1 ? "day to go" : "days to go"; }
-    else if (dueEnd >= 0) { cdFrac = 1; cdUnit = "enjoy!"; }
-    else { cdFrac = 1; cdUnit = ""; }
-    const CIRC = 2 * Math.PI * 52;
-    const cdOff = CIRC * (1 - cdFrac);
-    const countdownTile = '<div class="card stat tone-ember" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px">' +
-      '<div class="cd-ring"><svg viewBox="0 0 120 120">' +
-        '<circle class="cd-track" cx="60" cy="60" r="52"></circle>' +
-        '<circle class="cd-arc" cx="60" cy="60" r="52" style="stroke-dasharray:'+CIRC.toFixed(1)+';stroke-dashoffset:'+cdOff.toFixed(1)+'"></circle>' +
-      '</svg><div class="cd-center"><span class="cd-num">'+countVal+'</span>'+(cdUnit?'<span class="cd-unit">'+esc(cdUnit)+'</span>':"")+'</div></div>' +
+    // countdown — trail-to-camp scene
+    let cdUnit = "";
+    if (du === null) cdUnit = "";
+    else if (du > 0) cdUnit = du === 1 ? "day to go" : "days to go";
+    else if (dueEnd >= 0) cdUnit = "you’re here";
+    else cdUnit = "";
+    const countdownTile = '<div class="card stat tone-ember cd-tile" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px">' +
+      '<div class="cd-top"><span class="cd-num">'+countVal+'</span>'+(cdUnit?'<span class="cd-unit">'+esc(cdUnit)+'</span>':"")+'</div>' +
+      '<div class="cd-scene">'+trailScene(du, dueEnd)+'</div>' +
       '<div class="label" style="text-transform:none;letter-spacing:0">'+esc(countSub)+'</div>' +
     '</div>';
     html += '<div class="grid cols-3 section-block">' +
