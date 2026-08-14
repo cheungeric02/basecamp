@@ -179,6 +179,11 @@
   .cd-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .cd-fg { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .cd-sub { text-transform: none; letter-spacing: 0; margin-top: 4px; }
+  .contrib-pct { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--accent); letter-spacing: -.02em; margin: 6px 0 2px; }
+  .contrib-avatars { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .contrib-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 4px; border-radius: 999px; background: var(--surface-2); font-size: .86rem; font-weight: 500; }
+  .contrib-chip.pending { opacity: .48; }
+  .contrib-chip .contrib-tick { color: var(--accent); font-weight: 800; margin-left: -2px; }
   .cd-num { font-family: var(--font-display); font-size: 2.4rem; line-height: 1; color: var(--ember); letter-spacing: -.02em; }
   .cd-unit { font-family: var(--font-mono); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
@@ -2820,6 +2825,36 @@
     startActivityWatch();
     const entries = tripActivity(trip);
     if (!entries.length) return html + emptyState(I.tracker, "No activity yet for this trip. Edits by you and your group will show up here.");
+
+    // Participation summary — how much of the crew has actually made an edit.
+    const people = trip.people || [];
+    const editEntries = entries.filter(a => (a.text || "") !== "joined the trip");
+    const contribNames = new Set(editEntries.map(a => (a.who || "").trim()).filter(Boolean));
+    const crewDone = people.filter(p => contribNames.has(p.name));
+    const waiting = people.filter(p => !contribNames.has(p.name));
+    const crewNames = new Set(people.map(p => p.name));
+    const others = [...contribNames].filter(n => !crewNames.has(n));
+    const pct = people.length ? Math.round(crewDone.length / people.length * 100) : 0;
+    if (people.length) {
+      let sum = '<div class="card card-pad section-block">' +
+        '<div class="label">Crew participation</div>' +
+        '<div class="contrib-pct">' + pct + '%</div>' +
+        '<div class="sub">' + crewDone.length + ' of ' + people.length + ' ' + (people.length === 1 ? 'person has' : 'people have') + ' made an edit</div>' +
+        '<div class="progress" style="margin-top:10px"><span style="width:' + pct + '%"></span></div>' +
+        '<div class="contrib-avatars">';
+      people.forEach(p => {
+        const done = contribNames.has(p.name);
+        sum += '<span class="contrib-chip' + (done ? '' : ' pending') + '" title="' + esc(p.name) + (done ? ' — has edited' : ' — no edits yet') + '">' +
+          avatarOf(p) + '<span>' + esc(p.name) + '</span>' + (done ? '<span class="contrib-tick">✓</span>' : '') + '</span>';
+      });
+      sum += '</div>';
+      if (waiting.length) sum += '<div class="sub" style="margin-top:12px">Waiting on ' + esc(waiting.map(p => p.name).join(", ")) + '</div>';
+      if (others.length) sum += '<div class="sub" style="margin-top:4px">Also edited (not on the crew list): ' + esc(others.join(", ")) + '</div>';
+      sum += '</div>';
+      html += sum;
+    }
+
+    html += '<div class="section-title" style="margin-top:18px"><h3>Recent activity</h3></div>';
     html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
     entries.forEach(a => {
       html += '<div class="row-item">'+avatarByName(trip, a.who||"?") +
