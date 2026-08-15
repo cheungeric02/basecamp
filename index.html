@@ -179,11 +179,13 @@
   .cd-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .cd-fg { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .cd-sub { text-transform: none; letter-spacing: 0; margin-top: 4px; }
-  .contrib-pct { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--accent); letter-spacing: -.02em; margin: 6px 0 2px; }
-  .contrib-avatars { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .contrib-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 4px; border-radius: 999px; background: var(--surface-2); font-size: .86rem; font-weight: 500; }
-  .contrib-chip.pending { opacity: .48; }
-  .contrib-chip .contrib-tick { color: var(--accent); font-weight: 800; margin-left: -2px; }
+  .contrib-list { display: flex; flex-direction: column; gap: 13px; margin-top: 14px; }
+  .contrib-row { display: flex; align-items: center; gap: 11px; }
+  .contrib-bar-wrap { flex: 1; min-width: 0; }
+  .contrib-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .contrib-who { font-weight: 600; font-size: .95rem; }
+  .contrib-count { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .contrib-count b { color: var(--ink); font-weight: 700; }
   .cd-num { font-family: var(--font-display); font-size: 2.4rem; line-height: 1; color: var(--ember); letter-spacing: -.02em; }
   .cd-unit { font-family: var(--font-mono); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 
@@ -2826,30 +2828,31 @@
     const entries = tripActivity(trip);
     if (!entries.length) return html + emptyState(I.tracker, "No activity yet for this trip. Edits by you and your group will show up here.");
 
-    // Participation summary — how much of the crew has actually made an edit.
+    // Contribution breakdown — how many edits each person has made, and their
+    // share of the total. "joined the trip" isn't an edit, so it's excluded.
     const people = trip.people || [];
     const editEntries = entries.filter(a => (a.text || "") !== "joined the trip");
-    const contribNames = new Set(editEntries.map(a => (a.who || "").trim()).filter(Boolean));
-    const crewDone = people.filter(p => contribNames.has(p.name));
-    const waiting = people.filter(p => !contribNames.has(p.name));
-    const crewNames = new Set(people.map(p => p.name));
-    const others = [...contribNames].filter(n => !crewNames.has(n));
-    const pct = people.length ? Math.round(crewDone.length / people.length * 100) : 0;
-    if (people.length) {
+    const counts = {};
+    editEntries.forEach(a => { const w = (a.who || "").trim() || "Someone"; counts[w] = (counts[w] || 0) + 1; });
+    const rows = Object.keys(counts).map(w => ({ who: w, n: counts[w] })).sort((a, b) => b.n - a.n || a.who.localeCompare(b.who));
+    const total = editEntries.length;
+    const zero = people.filter(p => !counts[p.name]);
+    if (total > 0) {
       let sum = '<div class="card card-pad section-block">' +
-        '<div class="label">Crew participation</div>' +
-        '<div class="contrib-pct">' + pct + '%</div>' +
-        '<div class="sub">' + crewDone.length + ' of ' + people.length + ' ' + (people.length === 1 ? 'person has' : 'people have') + ' made an edit</div>' +
-        '<div class="progress" style="margin-top:10px"><span style="width:' + pct + '%"></span></div>' +
-        '<div class="contrib-avatars">';
-      people.forEach(p => {
-        const done = contribNames.has(p.name);
-        sum += '<span class="contrib-chip' + (done ? '' : ' pending') + '" title="' + esc(p.name) + (done ? ' — has edited' : ' — no edits yet') + '">' +
-          avatarOf(p) + '<span>' + esc(p.name) + '</span>' + (done ? '<span class="contrib-tick">✓</span>' : '') + '</span>';
+        '<div class="label">Contributions</div>' +
+        '<div class="sub" style="margin-top:2px">' + total + ' edit' + (total === 1 ? '' : 's') + ' from ' + rows.length + ' ' + (rows.length === 1 ? 'person' : 'people') + '</div>' +
+        '<div class="contrib-list">';
+      rows.forEach(r => {
+        const share = Math.round(r.n / total * 100);
+        sum += '<div class="contrib-row">' + avatarByName(trip, r.who) +
+          '<div class="contrib-bar-wrap">' +
+            '<div class="contrib-row-top"><span class="contrib-who">' + esc(r.who) + '</span>' +
+            '<span class="contrib-count"><b>' + r.n + '</b> edit' + (r.n === 1 ? '' : 's') + ' · ' + share + '%</span></div>' +
+            '<div class="progress"><span style="width:' + share + '%"></span></div>' +
+          '</div></div>';
       });
       sum += '</div>';
-      if (waiting.length) sum += '<div class="sub" style="margin-top:12px">Waiting on ' + esc(waiting.map(p => p.name).join(", ")) + '</div>';
-      if (others.length) sum += '<div class="sub" style="margin-top:4px">Also edited (not on the crew list): ' + esc(others.join(", ")) + '</div>';
+      if (zero.length) sum += '<div class="sub" style="margin-top:14px">No edits yet: ' + esc(zero.map(p => p.name).join(", ")) + '</div>';
       sum += '</div>';
       html += sum;
     }
