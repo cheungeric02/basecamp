@@ -452,6 +452,34 @@
     position: sticky; bottom: 0; background: var(--surface); }
   .field { display: flex; flex-direction: column; gap: 6px; }
   .field.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* full-day hourly forecast */
+  .day-loading { color: var(--muted); font-size: .92rem; text-align: center; padding: 26px 6px; line-height: 1.5; }
+  .day-summary { display: flex; flex-direction: column; gap: 2px; }
+  .day-summary.manual { background: var(--info-soft); border-radius: 14px; padding: 12px 14px; }
+  .ds-temps { font-family: var(--font-display); font-size: 2rem; line-height: 1.1; letter-spacing: -.02em; }
+  .ds-temps .ds-hi { color: #E8863B; } .ds-temps .ds-lo { color: var(--muted); }
+  .ds-cond { font-size: .85rem; color: var(--muted); }
+  .day-legend { display: flex; gap: 16px; font-size: .78rem; }
+  .day-legend .lg-temp { color: #E8863B; font-weight: 600; }
+  .day-legend .lg-precip { color: #4E93D6; font-weight: 600; }
+  .day-chart { width: 100%; height: auto; display: block; }
+  .day-chart .dc-axis { stroke: var(--border); stroke-width: 1; }
+  .day-chart .dc-t { fill: #E8863B; font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
+  .day-chart .dc-pp { fill: #4E93D6; font-size: 10px; font-weight: 700; font-family: var(--font-mono); }
+  .day-chart .dc-x { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+  .hr-head { display: grid; grid-template-columns: 1fr 56px 128px; gap: 10px; padding: 0 4px 2px;
+    font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .hr-head span:nth-child(2) { text-align: right; } .hr-head span:nth-child(3) { text-align: left; }
+  .hr-list { display: flex; flex-direction: column; }
+  .hr-row { display: grid; grid-template-columns: 1fr 56px 128px; gap: 10px; align-items: center;
+    padding: 7px 4px; border-top: 1px solid var(--border); }
+  .hr-row:first-child { border-top: none; }
+  .hr-time { color: var(--ink); font-size: .9rem; }
+  .hr-temp { text-align: right; font-weight: 700; color: #E8863B; font-variant-numeric: tabular-nums; }
+  .hr-precip { display: flex; align-items: center; gap: 8px; }
+  .hr-bar { flex: 1; height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+  .hr-bar > span { display: block; height: 100%; background: #4E93D6; border-radius: 999px; }
+  .hr-pp { width: 34px; text-align: right; font-size: .82rem; color: #4E93D6; font-weight: 600; font-variant-numeric: tabular-nums; }
   .field label { font-size: .82rem; font-weight: 600; color: var(--ink); }
   .field .hint { font-size: .76rem; color: var(--muted); font-weight: 400; }
   .field input, .field select, .field textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--border-strong);
@@ -1502,7 +1530,7 @@
       html += '<div class="card card-pad" style="color:var(--muted)">Set trip dates in Edit trip to lay out the daily forecast.</div>';
     } else {
       html += '<div class="card card-pad" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;background:var(--info-soft);border-color:transparent">' +
-        '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Live forecast fills in automatically within ~16 days of the trip. Tap a card to override with your own note.</span></div>';
+        '<span class="label" style="color:var(--info)">Tip</span><span style="font-size:.9rem;color:var(--ink)">Live forecast fills in automatically within ~16 days of the trip. Tap a day to see it hour by hour.</span></div>';
       html += '<div class="wx-grid">';
       days.forEach(d => {
         const w = (trip.weather||[]).find(x => x.date === d) || { date: d };
@@ -1510,7 +1538,7 @@
         const kind = filled ? condIcon(w.condition) : null;
         const sc = kind ? wxScene(kind) : null;
         const cardStyle = sc ? 'text-align:left;cursor:pointer;min-height:200px;background:'+sc.grad+';color:'+sc.ink : 'text-align:left;cursor:pointer;min-height:200px;color:inherit';
-        html += '<button class="card wx'+(sc?' wx-scened':'')+'" data-action="edit-weather" data-id="'+d+'" style="'+cardStyle+'">' +
+        html += '<button class="card wx'+(sc?' wx-scened':'')+'" data-action="day-forecast" data-id="'+d+'" style="'+cardStyle+'">' +
           (sc ? wxSceneLayer(kind) : '') +
           '<div class="label">'+esc(fmtDate(d,"dow"))+' · '+esc(fmtDate(d,"md"))+'</div>' +
           '<div class="wx-body" id="infowx_'+esc(d)+'">' +
@@ -1519,7 +1547,7 @@
             '<div class="cond" style="font-weight:600">'+esc(w.condition||"—")+'</div>' +
             (w.precip?'<div class="row-sub" style="margin-top:6px">Precip: '+esc(w.precip)+'</div>':"") +
             (w.notes?'<div class="row-sub">'+esc(w.notes)+'</div>':"") +
-            '<div class="row-sub">Your note · tap to edit</div>'
+            '<div class="row-sub">Your note · tap for the full day</div>'
             : '<div class="temps"><span class="hi" style="color:var(--muted)">—</span></div><div class="cond" style="color:var(--muted);font-size:.85rem">Loading forecast…</div>') +
           '</div></button>';
       });
@@ -1863,7 +1891,7 @@
       b.innerHTML = '<div class="temps" style="margin-top:6px"><span class="hi" style="font-size:2rem">'+Math.round(w.hi)+'°</span><span class="lo"> / '+Math.round(w.lo)+'°</span></div>' +
         '<div class="cond" style="font-weight:600">'+esc(info.label)+'</div>' +
         (w.pp != null ? '<div class="row-sub" style="margin-top:6px">Precip: '+w.pp+'%</div>' : "") +
-        '<div class="row-sub">● Live · tap to override</div>';
+        '<div class="row-sub">● Live · tap for hourly</div>';
     });
     if (sunData) renderSunCard(); // weather codes just loaded — re-tint the arc to match
   }
@@ -2554,6 +2582,7 @@
 
     // weather
     "edit-weather": (el) => editWeather(el.dataset.id),
+    "day-forecast": (el) => openDayForecast(el.dataset.id),
 
     // meals
     "add-meal": () => { const t = activeTrip(); openForm({ title:"Add meal", fields: mealFields(t), values:{ type:"Dinner", day:(tripDays(t)[0]||"") }, onSubmit: v => { t.meals.push(Object.assign({id:uid()}, v)); save(); logActivity("added meal “"+v.name+"”"); render(); toast("Meal added"); } }); },
@@ -2664,6 +2693,126 @@
       opts.deleteLabel = "Revert to live"; opts.deleteIcon = I.refresh; opts.deleteClass = "";
     }
     openForm(opts);
+  }
+
+  /* ---------- Full-day hourly forecast ---------- */
+  let hourlyWxCache = null, hourlyWxKey = "";
+  async function loadHourlyWx(force) {
+    const t = activeTrip();
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    if (!(lat && lon)) return null;
+    const key = lat.toFixed(3) + "," + lon.toFixed(3);
+    if (hourlyWxCache && hourlyWxKey === key && !force) return hourlyWxCache;
+    try {
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
+      const j = await r.json();
+      if (j.hourly && j.hourly.time && j.hourly.time.length) { hourlyWxCache = j.hourly; hourlyWxKey = key; return hourlyWxCache; }
+    } catch (e) {}
+    return null;
+  }
+  function hoursForDate(hourly, date) {
+    const out = [];
+    (hourly.time || []).forEach((iso, i) => {
+      if (iso.slice(0, 10) !== date) return;
+      const h = parseInt(iso.slice(11, 13), 10);
+      if (h < 6 || h > 23) return; // waking hours, 6am–11pm
+      out.push({
+        h: h,
+        temp: hourly.temperature_2m ? hourly.temperature_2m[i] : null,
+        pp: hourly.precipitation_probability ? (hourly.precipitation_probability[i] || 0) : 0
+      });
+    });
+    return out;
+  }
+  function fmtHourShort(h) { let hh = h % 12; if (hh === 0) hh = 12; return hh + (h < 12 ? "a" : "p"); }
+  function fmtHourLong(h) { let hh = h % 12; if (hh === 0) hh = 12; return hh + " " + (h < 12 ? "AM" : "PM"); }
+  function hourlyChart(hours) {
+    if (!hours.length) return "";
+    const W = 640, H = 236, padL = 26, padR = 16, N = hours.length;
+    const step = (W - padL - padR) / Math.max(1, N - 1);
+    const x = i => padL + i * step;
+    const temps = hours.map(h => h.temp).filter(v => v != null);
+    if (!temps.length) return "";
+    let tmin = Math.min.apply(null, temps), tmax = Math.max.apply(null, temps);
+    if (tmin === tmax) { tmin -= 1; tmax += 1; }
+    const tTop = 26, tBot = 116;
+    const ty = v => tBot - (v - tmin) / (tmax - tmin) * (tBot - tTop);
+    const pBase = 200, pTop = 138;
+    const barW = Math.min(20, step * 0.55);
+    let bars = "";
+    hours.forEach((h, i) => {
+      const pp = h.pp || 0;
+      const bh = pp / 100 * (pBase - pTop);
+      if (bh > 0.5) bars += '<rect x="' + (x(i) - barW / 2).toFixed(1) + '" y="' + (pBase - bh).toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + bh.toFixed(1) + '" rx="2" fill="#4E93D6" opacity="' + (0.4 + pp / 100 * 0.5).toFixed(2) + '"></rect>';
+      if (pp >= 20) bars += '<text x="' + x(i).toFixed(1) + '" y="' + (pBase - bh - 3).toFixed(1) + '" text-anchor="middle" class="dc-pp">' + pp + '</text>';
+    });
+    const pts = hours.filter(h => h.temp != null).map((h, i) => x(hours.indexOf(h)).toFixed(1) + ',' + ty(h.temp).toFixed(1)).join(" ");
+    let dots = "";
+    hours.forEach((h, i) => { if (h.temp != null) dots += '<circle cx="' + x(i).toFixed(1) + '" cy="' + ty(h.temp).toFixed(1) + '" r="2.2" fill="#E8863B"></circle>'; });
+    let iMax = 0, iMin = 0;
+    hours.forEach((h, i) => { if (h.temp != null) { if (h.temp > hours[iMax].temp) iMax = i; if (h.temp < hours[iMin].temp) iMin = i; } });
+    let tlabels = "";
+    [iMax, iMin].forEach(i => { if (hours[i].temp != null) tlabels += '<text x="' + x(i).toFixed(1) + '" y="' + (ty(hours[i].temp) - 7).toFixed(1) + '" text-anchor="middle" class="dc-t">' + Math.round(hours[i].temp) + '°</text>'; });
+    let xlabels = "";
+    hours.forEach((h, i) => { if (h.h % 3 === 0 || i === N - 1) xlabels += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" class="dc-x">' + fmtHourShort(h.h) + '</text>'; });
+    const axis = '<line x1="' + padL + '" y1="' + pBase + '" x2="' + (W - padR) + '" y2="' + pBase + '" class="dc-axis"></line>';
+    return '<svg class="day-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">' +
+      axis + bars +
+      '<polyline points="' + pts + '" fill="none" stroke="#E8863B" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
+      dots + tlabels + xlabels + '</svg>';
+  }
+  function hourlyListHtml(hours) {
+    return '<div class="hr-list">' + hours.map(h => {
+      const pp = h.pp || 0;
+      return '<div class="hr-row">' +
+        '<span class="hr-time">' + fmtHourLong(h.h) + '</span>' +
+        '<span class="hr-temp">' + (h.temp != null ? Math.round(h.temp) + '°' : '—') + '</span>' +
+        '<span class="hr-precip"><span class="hr-bar"><span style="width:' + pp + '%"></span></span><span class="hr-pp">' + pp + '%</span></span>' +
+        '</div>';
+    }).join("") + '</div>';
+  }
+  async function openDayForecast(date) {
+    const t = activeTrip();
+    const overlay = document.getElementById("overlay");
+    overlay.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+      '<div class="modal-head"><h3>' + esc(fmtDate(date, "dow")) + ' · ' + esc(fmtDate(date, "md")) + '</h3>' +
+        '<div style="display:flex;gap:8px;align-items:center">' +
+          '<button class="btn sm ghost" id="dayEditBtn">' + I.edit + ' Edit</button>' +
+          '<button class="icon-btn" data-close>' + I.x + '</button></div></div>' +
+      '<div class="modal-body" id="dayFcBody"><div class="day-loading">Loading hourly forecast…</div></div>' +
+      '</div>';
+    overlay.classList.add("open");
+    const editBtn = document.getElementById("dayEditBtn");
+    if (editBtn) editBtn.addEventListener("click", () => editWeather(date));
+    const manual = (t.weather || []).find(x => x.date === date && (x.high || x.low || x.condition));
+    const hourly = await loadHourlyWx();
+    const body = document.getElementById("dayFcBody");
+    if (!body) return; // modal was closed while loading
+    const hours = hourly ? hoursForDate(hourly, date) : [];
+    let html = "";
+    if (manual) {
+      html += '<div class="day-summary manual"><span class="label" style="color:var(--info)">Your forecast</span>' +
+        '<div class="ds-temps">' + (manual.high ? esc(manual.high) + '°' : '') + (manual.low ? ' / ' + esc(manual.low) + '°' : '') + '</div>' +
+        (manual.condition ? '<div class="ds-cond">' + esc(manual.condition) + '</div>' : '') +
+        (manual.precip ? '<div class="row-sub">Precip: ' + esc(manual.precip) + '</div>' : '') +
+        (manual.notes ? '<div class="row-sub">' + esc(manual.notes) + '</div>' : '') + '</div>';
+    }
+    if (hours.length && hours.some(h => h.temp != null)) {
+      const temps = hours.map(h => h.temp).filter(v => v != null);
+      const hi = Math.round(Math.max.apply(null, temps)), lo = Math.round(Math.min.apply(null, temps));
+      const maxPp = Math.max.apply(null, hours.map(h => h.pp || 0));
+      html += '<div class="day-summary">' +
+        '<div class="ds-temps"><span class="ds-hi">' + hi + '°</span><span class="ds-lo"> / ' + lo + '°</span></div>' +
+        '<div class="ds-cond">High &amp; low · ' + maxPp + '% peak chance of precip</div></div>';
+      html += '<div class="day-legend"><span class="lg-temp">— Temperature</span><span class="lg-precip">▮ Chance of precip</span></div>';
+      html += hourlyChart(hours);
+      html += '<div class="hr-head"><span>Hour</span><span>Temp</span><span>Precip</span></div>';
+      html += hourlyListHtml(hours);
+    } else {
+      html += '<div class="day-loading">' + (manual ? "The live hourly forecast isn’t out for this day yet — only your own note above." : "The hourly forecast isn’t available for this day yet. It fills in automatically within about 16 days of the trip. You can tap Edit to jot your own forecast.") + '</div>';
+    }
+    body.innerHTML = html;
   }
 
   function openShopPrice(s) {
