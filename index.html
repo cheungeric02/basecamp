@@ -467,13 +467,14 @@
   .day-chart .dc-t { fill: #E8863B; font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
   .day-chart .dc-pp { fill: #4E93D6; font-size: 10px; font-weight: 700; font-family: var(--font-mono); }
   .day-chart .dc-x { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); }
-  .hr-head { display: grid; grid-template-columns: 1fr 56px 128px; gap: 10px; padding: 0 4px 2px;
+  .hr-head { display: grid; grid-template-columns: 1fr 30px 48px 120px; gap: 10px; padding: 0 4px 2px;
     font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-  .hr-head span:nth-child(2) { text-align: right; } .hr-head span:nth-child(3) { text-align: left; }
+  .hr-head span:nth-child(3) { text-align: right; } .hr-head span:nth-child(4) { text-align: left; }
   .hr-list { display: flex; flex-direction: column; }
-  .hr-row { display: grid; grid-template-columns: 1fr 56px 128px; gap: 10px; align-items: center;
+  .hr-row { display: grid; grid-template-columns: 1fr 30px 48px 120px; gap: 10px; align-items: center;
     padding: 7px 4px; border-top: 1px solid var(--border); }
   .hr-row:first-child { border-top: none; }
+  .hr-ic { display: flex; align-items: center; justify-content: center; }
   .hr-time { color: var(--ink); font-size: .9rem; }
   .hr-temp { text-align: right; font-weight: 700; color: #E8863B; font-variant-numeric: tabular-nums; }
   .hr-precip { display: flex; align-items: center; gap: 8px; }
@@ -2705,7 +2706,7 @@
     const key = lat.toFixed(3) + "," + lon.toFixed(3);
     if (hourlyWxCache && hourlyWxKey === key && !force) return hourlyWxCache;
     try {
-      const r = await fetch("https://api.open-meteo.com/v1/forecast?hourly=temperature_2m,precipitation_probability&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?hourly=temperature_2m,precipitation_probability,weather_code&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
       const j = await r.json();
       if (j.hourly && j.hourly.time && j.hourly.time.length) { hourlyWxCache = j.hourly; hourlyWxKey = key; return hourlyWxCache; }
     } catch (e) {}
@@ -2720,7 +2721,8 @@
       out.push({
         h: h,
         temp: hourly.temperature_2m ? hourly.temperature_2m[i] : null,
-        pp: hourly.precipitation_probability ? (hourly.precipitation_probability[i] || 0) : 0
+        pp: hourly.precipitation_probability ? (hourly.precipitation_probability[i] || 0) : 0,
+        code: hourly.weather_code ? hourly.weather_code[i] : null
       });
     });
     return out;
@@ -2762,11 +2764,14 @@
       '<polyline points="' + pts + '" fill="none" stroke="#E8863B" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
       dots + tlabels + xlabels + '</svg>';
   }
-  function hourlyListHtml(hours) {
+  function hourlyListHtml(hours, riseH, setH) {
     return '<div class="hr-list">' + hours.map(h => {
       const pp = h.pp || 0;
+      let kind = h.code != null ? wmoInfo(h.code).icon : null;
+      if (kind === "sun" && (h.h < riseH || h.h >= setH)) kind = "moon"; // clear night -> moon
       return '<div class="hr-row">' +
         '<span class="hr-time">' + fmtHourLong(h.h) + '</span>' +
+        '<span class="hr-ic">' + (kind ? wxIcon(kind, 24) : '') + '</span>' +
         '<span class="hr-temp">' + (h.temp != null ? Math.round(h.temp) + '°' : '—') + '</span>' +
         '<span class="hr-precip"><span class="hr-bar"><span style="width:' + pp + '%"></span></span><span class="hr-pp">' + pp + '%</span></span>' +
         '</div>';
@@ -2807,8 +2812,11 @@
         '<div class="ds-cond">High &amp; low · ' + maxPp + '% peak chance of precip</div></div>';
       html += '<div class="day-legend"><span class="lg-temp">— Temperature</span><span class="lg-precip">▮ Chance of precip</span></div>';
       html += hourlyChart(hours);
-      html += '<div class="hr-head"><span>Hour</span><span>Temp</span><span>Precip</span></div>';
-      html += hourlyListHtml(hours);
+      const sd = sunData && sunData[date];
+      const riseH = sd && sd.rise ? Math.floor(sunMin(sd.rise) / 60) : 6;
+      const setH = sd && sd.set ? Math.ceil(sunMin(sd.set) / 60) : 20;
+      html += '<div class="hr-head"><span>Hour</span><span></span><span>Temp</span><span>Precip</span></div>';
+      html += hourlyListHtml(hours, riseH, setH);
     } else {
       html += '<div class="day-loading">' + (manual ? "The live hourly forecast isn’t out for this day yet — only your own note above." : "The hourly forecast isn’t available for this day yet. It fills in automatically within about 16 days of the trip. You can tap Edit to jot your own forecast.") + '</div>';
     }
