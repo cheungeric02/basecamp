@@ -2235,14 +2235,17 @@
       html += '<div class="day-head"><h4>Carpool groups</h4></div><div class="grid cols-2">';
       Object.keys(groups).forEach(k => {
         const members = groups[k];
-        const seatsOffered = members.reduce((s,m)=>s+((m.g&&m.g.driver)?(Number(m.g.seats)||0):0),0);
+        const drivers = members.filter(m=>m.g&&m.g.driver);
+        const spareSeats = drivers.reduce((s,m)=>s+(Number(m.g.seats)||0),0);
+        const capacity = spareSeats + drivers.length; // drivers' own seats + the spares they offer
+        const occupied = members.length; // everyone currently in this group
         const riders = members.filter(m=>!(m.g&&m.g.driver)).length;
         const meet = (members.find(m=>m.g&&m.g.meetPoint)||{}).g;
         let cap = "";
-        if (seatsOffered > 0) {
-          const over = riders > seatsOffered;
-          cap = '<span class="pill '+(over?"danger":"green")+'" style="margin-left:auto">'+riders+' / '+seatsOffered+' seat'+(seatsOffered===1?"":"s")+(over?" · over!":"")+'</span>';
-        } else if (riders && !members.some(m=>m.g&&m.g.driver)) {
+        if (drivers.length) {
+          const over = occupied > capacity;
+          cap = '<span class="pill '+(over?"danger":"green")+'" style="margin-left:auto">'+occupied+' / '+capacity+' seat'+(capacity===1?"":"s")+(over?" · over!":"")+'</span>';
+        } else if (riders) {
           cap = '<span class="pill warn" style="margin-left:auto">no driver yet</span>';
         }
         html += '<div class="card card-pad"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="label">'+esc(k)+'</span>'+cap+'</div>' +
