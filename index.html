@@ -2550,10 +2550,12 @@
       ],
       values: { price: (s.price===0||s.price)?s.price:"", paidBy: s.paidBy || (t.people[0]||{}).id, splitAmong: (s.splitAmong && s.splitAmong.length) ? s.splitAmong : t.people.map(p=>p.id) },
       onSubmit: v => {
-        s.price = (v.price === "" ? "" : (Number(v.price)||0));
-        s.paidBy = v.paidBy; s.splitAmong = v.splitAmong;
+        // Re-resolve by id: a sync echo may have replaced the item object since the modal opened.
+        const cur = findById(activeTrip().shopping, s.id) || s;
+        cur.price = (v.price === "" ? "" : (Number(v.price)||0));
+        cur.paidBy = v.paidBy; cur.splitAmong = v.splitAmong;
         save(); render();
-        if (Number(s.price) > 0) { logActivity("priced “"+s.item+"” at "+money(s.price)); toast(money(s.price)+" added to the split"); }
+        if (Number(cur.price) > 0) { logActivity("priced “"+cur.item+"” at "+money(cur.price)); toast(money(cur.price)+" added to the split"); }
       }
     });
   }
@@ -3110,6 +3112,23 @@
     const a = document.activeElement;
     return !!(a && (a.id === "tripNotes" || a.id === "newCheck"));
   }
+  // Merge a remote array into the local one by id, reusing the existing local object for each
+  // matching id (so references held by open editors stay valid). Returns an array of live objects
+  // in the remote order; ids only present remotely are added, ids gone remotely are dropped.
+  function mergeById(localArr, remoteArr) {
+    if (!Array.isArray(remoteArr)) return remoteArr;
+    const local = Array.isArray(localArr) ? localArr : [];
+    const lb = {}; local.forEach(x => { if (x && x.id != null) lb[x.id] = x; });
+    return remoteArr.map(r => {
+      if (r && r.id != null && lb[r.id]) {
+        const o = lb[r.id];
+        Object.keys(o).forEach(k => { if (!(k in r)) delete o[k]; }); // drop keys removed remotely
+        Object.assign(o, r);
+        return o;
+      }
+      return r;
+    });
+  }
   window.__bcApp = {
     getLocalTrips() { return state.trips; },
     refresh() { render(); },
@@ -3118,8 +3137,15 @@
       if (!Array.isArray(remoteTrips) || !remoteTrips.length) return;
       const byId = {};
       remoteTrips.forEach(t => { ensureShape(t); byId[t.id] = t; });
-      // update existing trips in place (preserves object refs held by open editors), add new ones
-      remoteTrips.forEach(rt => { const lt = state.trips.find(t => t.id === rt.id); if (lt) Object.assign(lt, rt); else state.trips.push(rt); });
+      // update existing trips in place (preserves object refs held by open editors), add new ones.
+      // Nested item arrays are merged by id so refs an open editor holds (e.g. a shopping item
+      // being priced) stay live — otherwise the editor would write to a detached, replaced object.
+      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","todos"];
+      remoteTrips.forEach(rt => {
+        const lt = state.trips.find(t => t.id === rt.id);
+        if (lt) { NESTED.forEach(k => { if (Array.isArray(rt[k])) rt[k] = mergeById(lt[k], rt[k]); }); Object.assign(lt, rt); }
+        else state.trips.push(rt);
+      });
       // drop any local trips that no longer exist remotely (remote is the source of truth)
       state.trips = state.trips.filter(t => byId[t.id]);
       if (!state.trips.find(t => t.id === state.activeId)) state.activeId = (state.trips[0] || {}).id;
