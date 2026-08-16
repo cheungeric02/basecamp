@@ -547,10 +547,10 @@
     .row-item .store-input { order: 5; flex: 1 1 100%; max-width: none; margin: 4px 0 0 32px; }
     .row-item .assign-wrap, .row-item .bringers { order: 6; flex: 1 1 100%; margin: 4px 0 0 32px; justify-content: flex-start; }
     .row-item .assign-wrap .inline-select, .bringers .bringer-add { flex: 1 1 auto; max-width: none; }
-    .meal-item { align-items: flex-start; }
-    .meal-item > .pill { margin-top: 2px; }
-    /* meal row: name + actions on line 1, Ingredients button full-width on line 2 */
-    .meal-item .ming-toggle { order: 6; flex: 1 1 100%; margin-top: 10px; justify-content: center; }
+    /* meal row: pill + name + edit together on line 1, Ingredients button on line 2 */
+    .meal-item { align-items: center; padding-top: 10px; padding-bottom: 10px; }
+    .meal-item .row-main { flex: 1 1 0; min-width: 0; }
+    .meal-item .ming-toggle { order: 6; flex: 1 1 100%; margin-top: 8px; justify-content: center; }
   }
   @media (max-width: 520px) {
     .cols-4, .cols-3, .cols-2 { grid-template-columns: 1fr; }
