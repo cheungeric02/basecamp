@@ -287,6 +287,15 @@
     line-height: 1; padding: 0 3px; opacity: .55; }
   .bringer .bx:hover { opacity: 1; }
   .bringer-add { max-width: 170px; }
+  .qty-bringer { padding: 3px 4px 3px 6px; gap: 3px; }
+  .qty-bringer .qname { padding: 0 1px; }
+  .qty-bringer .qmult { opacity: .72; font-weight: 700; }
+  .qty-bringer .qstep { border: none; background: rgba(0,0,0,.07); color: var(--accent-ink); width: 19px; height: 19px; border-radius: 50%; font-size: 1rem; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex: none; }
+  .qty-bringer .qstep:hover { background: rgba(0,0,0,.15); }
+  .qsum { margin-top: 2px; font-weight: 600; }
+  .qsum-ok { color: var(--accent); }
+  .qsum-short { color: var(--ember); }
+  .qsum-none { color: var(--muted); }
 
   .filterbar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 2px 0 18px; }
   .filterbar .flabel { font-family: var(--font-mono); font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
@@ -884,7 +893,7 @@
         { item: "Tent", category: "Shelter & Sleep", packed: false, personId: "" },
         { item: "Tent stakes & mallet", category: "Shelter & Sleep", packed: false, personId: "" },
         { item: "Tarp / footprint", category: "Shelter & Sleep", packed: false, personId: "" },
-        { item: "Sleeping bag", category: "Shelter & Sleep", packed: false, personId: "" },
+        { item: "Sleeping bag", category: "Shelter & Sleep", packed: false, personId: "", needed: 6 },
         { item: "Sleeping pad / air mattress", category: "Shelter & Sleep", packed: false, personId: "" },
         { item: "Pillow", category: "Shelter & Sleep", packed: false, personId: "" },
         { item: "Headlamp / flashlight", category: "Shelter & Sleep", packed: false, personId: "" },
@@ -2181,10 +2190,11 @@
     const catNames = Object.keys(cats);
     if (!catNames.length && !done.length) return '<div class="card card-pad" style="color:var(--muted)">No items match this filter.</div>';
     function packRow(p, showCat) {
+      const needTag = (showBringing && Number(p.needed) > 0) ? ' <span class="label" style="text-transform:none;letter-spacing:0">· need '+Number(p.needed)+'</span>' : "";
       return '<div class="row-item'+(p.packed?" done":"")+'">' +
         '<input type="checkbox" class="check" '+(p.packed?"checked":"")+' data-action="'+toggleAction+'" data-id="'+p.id+'">' +
-        '<div class="row-main"><div class="row-title">'+esc(p.item)+(showCat&&p.category?' <span class="tag-cat">'+esc(p.category)+'</span>':"")+'</div></div>' +
-        (showBringing ? assignControl(trip, p, p.personIds, "addbringer-pack", "removebringer-pack", "+ Who's bringing?") : "") +
+        '<div class="row-main"><div class="row-title">'+esc(p.item)+needTag+(showCat&&p.category?' <span class="tag-cat">'+esc(p.category)+'</span>':"")+'</div>'+(showBringing?packQtySummary(p):"")+'</div>' +
+        (showBringing ? groupBringers(trip, p) : "") +
         '<div class="row-actions"><button class="icon-btn" data-action="'+editAction+'" data-id="'+p.id+'" title="Edit">'+I.edit+'</button></div></div>';
     }
     catNames.forEach(cat => {
@@ -2262,8 +2272,40 @@
     const cats = ["Shelter & Sleep","Kitchen & Cooking","Clothing","Personal & Health","Tools & Extras","Fun","Other"];
     return [
       { key:"item", label:"Item", type:"text", required:true, placeholder:"e.g. Sleeping bag" },
-      { key:"category", label:"Category", type:"select", options: cats, hint:"Assign who's bringing it on the list (more than one person can)." },
+      { key:"category", label:"Category", type:"select", options: cats },
+      { key:"needed", label:"How many needed (optional)", type:"number", placeholder:"e.g. 6", hint:"Leave blank for one-off gear. Set a total when several are needed and people split bringing them — each person then notes how many they'll bring." },
     ];
+  }
+  function bringerIds(p) { return Array.isArray(p.personIds) ? p.personIds : (p.personId ? [p.personId] : []); }
+  function bringerQty(p, id) { return (p.qtys && p.qtys[id] != null) ? Number(p.qtys[id]) : 1; }
+  function broughtTotal(p) { return bringerIds(p).reduce((s, id) => s + bringerQty(p, id), 0); }
+  function packQtySummary(p) {
+    const need = Number(p.needed) > 0 ? Number(p.needed) : 0;
+    if (!need) return "";
+    const got = broughtTotal(p);
+    const ok = got >= need;
+    const cls = ok ? "qsum-ok" : (got > 0 ? "qsum-short" : "qsum-none");
+    const txt = got + " of " + need + (ok ? " ✓" : " · short " + (need - got));
+    return '<div class="row-sub qsum ' + cls + '">bringing ' + esc(txt) + "</div>";
+  }
+  function groupBringers(trip, p) {
+    const ids = bringerIds(p);
+    const hasTarget = Number(p.needed) > 0;
+    const chips = ids.map(id => {
+      const n = personName(trip, id); if (!n) return "";
+      const q = bringerQty(p, id);
+      return '<span class="bringer qty-bringer" title="' + esc(n) + '">' +
+        (hasTarget ? '<button class="qstep" data-action="bringer-dec-pack" data-id="' + p.id + '" data-person="' + id + '" aria-label="One fewer">−</button>' : "") +
+        '<span class="qname">' + esc(n) + '</span>' +
+        (hasTarget ? '<span class="qmult">×' + q + '</span><button class="qstep" data-action="bringer-inc-pack" data-id="' + p.id + '" data-person="' + id + '" aria-label="One more">+</button>' : "") +
+        '<button class="bx" data-action="removebringer-pack" data-id="' + p.id + '" data-person="' + id + '" title="Remove ' + esc(n) + '">×</button>' +
+        '</span>';
+    }).join("");
+    const remaining = (trip.people || []).filter(pp => ids.indexOf(pp.id) < 0);
+    const addSel = '<select class="inline-select bringer-add" data-action="addbringer-pack" data-id="' + p.id + '" aria-label="Assign a person">' +
+      '<option value="">' + (ids.length ? "+ Add" : "+ Who's bringing?") + "</option>" +
+      remaining.map(pp => '<option value="' + pp.id + '">' + esc(pp.name) + "</option>").join("") + "</select>";
+    return '<div class="bringers">' + chips + addSel + "</div>";
   }
   function assignControl(trip, item, ids, addAction, removeAction, addLabel) {
     ids = Array.isArray(ids) ? ids : [];
@@ -2622,8 +2664,10 @@
     "toggle-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); s.gotIt = el.checked; save(); logActivity((el.checked?"bought":"un-checked")+" “"+s.item+"”"); render(); if (el.checked && !(Number(s.price) > 0) && activeTrip().people.length) openShopPrice(s); },
     "shop-price": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (s) openShopPrice(s); },
     "assign-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (p) { p.personId = el.value; save(); logActivity("set “"+p.item+"” to be brought by "+(personName(activeTrip(),el.value)||"nobody")); render(); } },
-    "addbringer-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p || !el.value) return; if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; if (p.personIds.indexOf(el.value) < 0) { p.personIds.push(el.value); delete p.personId; save(); logActivity(personName(activeTrip(),el.value)+" is also bringing “"+p.item+"”"); } render(); },
-    "removebringer-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p) return; if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; p.personIds = p.personIds.filter(x => x !== el.dataset.person); delete p.personId; save(); render(); },
+    "addbringer-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p || !el.value) return; if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; if (p.personIds.indexOf(el.value) < 0) { p.personIds.push(el.value); if (!p.qtys) p.qtys = {}; if (p.qtys[el.value] == null) p.qtys[el.value] = 1; delete p.personId; save(); logActivity(personName(activeTrip(),el.value)+" is also bringing “"+p.item+"”"); } render(); },
+    "removebringer-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p) return; if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; p.personIds = p.personIds.filter(x => x !== el.dataset.person); if (p.qtys) delete p.qtys[el.dataset.person]; delete p.personId; save(); render(); },
+    "bringer-inc-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p) return; if (!p.qtys) p.qtys = {}; const id = el.dataset.person; p.qtys[id] = bringerQty(p, id) + 1; save(); render(); },
+    "bringer-dec-pack": (el) => { const p = findById(activeTrip().packing, el.dataset.id); if (!p) return; if (!p.qtys) p.qtys = {}; const id = el.dataset.person; p.qtys[id] = Math.max(1, bringerQty(p, id) - 1); save(); render(); },
     "addassign-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (!s || !el.value) return; if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (s.assignedIds.indexOf(el.value) < 0) { s.assignedIds.push(el.value); save(); logActivity(personName(activeTrip(),el.value)+" is assigned to get “"+s.item+"”"); } render(); },
     "removeassign-shop": (el) => { const s = findById(activeTrip().shopping, el.dataset.id); if (!s) return; if (!Array.isArray(s.assignedIds)) s.assignedIds = []; s.assignedIds = s.assignedIds.filter(x => x !== el.dataset.person); save(); render(); },
     "filter-toggle": (el) => { const set = el.dataset.page === "packing" ? filterPacking : filterShopping; const val = el.dataset.val;
