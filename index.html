@@ -670,6 +670,7 @@
     logo: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 20h18L12 3Z"/><path d="M12 10 7.5 20"/><path d="M12 10l4.5 10"/></svg>',
     overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5 15.5 8.5"/></svg>',
     weather: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg>',
     meals: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v7a2 2 0 0 0 2 2v9M4 3v6M7 3v6"/><path d="M18 3c-1.5 0-3 2-3 5s1 4 3 4v9"/></svg>',
     shopping: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/></svg>',
     roles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
@@ -832,6 +833,7 @@
       name: "Bon Echo Camping Trip",
       location: "Bon Echo Provincial Park, ON",
       site: "Hardwood Hills Campground — Site 408",
+      parkPhone: "613-336-2228",
       startDate: D.fri, endDate: D.sun,
       people,
       weather: [],
@@ -1562,6 +1564,25 @@
       '<div><div class="label">Check-out</div><div style="font-family:var(--font-display);font-size:1.4rem;margin-top:4px">'+esc(trip.checkout||"—")+'</div></div>' +
       (!(trip.checkin || trip.checkout) ? '<button class="btn sm" data-action="edit-trip" style="margin-left:auto">Set times</button>' : '<button class="btn sm" data-action="edit-trip" style="margin-left:auto">Edit</button>') +
       '</div>';
+
+    // Park office
+    html += '<div class="section-title" style="margin-top:22px"><h3>Park office</h3></div>';
+    if (trip.parkPhone) {
+      const telHref = "tel:" + String(trip.parkPhone).replace(/[^\d+]/g, "");
+      html += '<div class="card card-pad" style="display:flex;gap:12px 14px;align-items:center;flex-wrap:wrap">' +
+        '<span class="wx-ic" style="flex:none">'+I.phone+'</span>' +
+        '<div style="flex:1 1 150px;min-width:0"><div class="label">'+esc(trip.location||"Park office")+'</div>' +
+        '<div style="font-family:var(--font-display);font-size:1.3rem;margin-top:2px;white-space:nowrap">'+esc(trip.parkPhone)+'</div></div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex:none;margin-left:auto">' +
+          '<a class="btn primary" href="'+esc(telHref)+'">'+I.phone+' Call</a>' +
+          '<button class="btn sm" data-action="edit-trip">Edit</button>' +
+        '</div>' +
+        '</div>';
+    } else {
+      html += '<div class="card card-pad" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">' +
+        '<span class="row-sub" style="color:var(--muted)">Add the park office number so anyone can call quickly.</span>' +
+        '<button class="btn sm" data-action="edit-trip">Add number</button></div>';
+    }
 
     // Location + Emergency services
     if (trip.location || (trip.lat && trip.lon)) {
@@ -3264,6 +3285,7 @@
     { key:"name", label:"Trip name", type:"text", required:true, placeholder:"e.g. Cottage Weekend" },
     { key:"location", label:"Location", type:"text", placeholder:"Park / town / region", hint:"Used to auto-find live weather." },
     { key:"site", label:"Site / address detail", type:"text", placeholder:"e.g. Campground — Site 12" },
+    { key:"parkPhone", label:"Park office phone", type:"text", placeholder:"e.g. 613-336-2228", hint:"Shown on the Info tab so anyone can call the park." },
     { key:"startDate", label:"Start date", type:"date", row:true },
     { key:"endDate", label:"End date", type:"date" },
     { key:"checkin", label:"Check-in time", type:"text", placeholder:"e.g. 2:00 PM", row:true },
@@ -3273,7 +3295,7 @@
   ];
   function newTrip() {
     openForm({ title:"New trip", submitLabel:"Create trip", fields: tripFields, values:{}, onSubmit: v => {
-      const t = blankTrip(v.name); t.location=v.location; t.site=v.site; t.startDate=v.startDate; t.endDate=v.endDate; t.checkin=v.checkin; t.checkout=v.checkout; t.lat=v.lat; t.lon=v.lon;
+      const t = blankTrip(v.name); t.location=v.location; t.site=v.site; t.parkPhone=v.parkPhone; t.startDate=v.startDate; t.endDate=v.endDate; t.checkin=v.checkin; t.checkout=v.checkout; t.lat=v.lat; t.lon=v.lon;
       state.trips.push(t); state.activeId = t.id; ui.section = "overview"; save(); logActivity("created trip “"+v.name+"”"); render();
       toast("Trip created — add your crew in Guests");
     }});
@@ -3282,7 +3304,7 @@
     const t = activeTrip();
     const fields = tripFields.concat([]);
     openForm({ title:"Trip details", fields: fields, values: t, onSubmit: v => {
-      Object.assign(t, { name:v.name, location:v.location, site:v.site, startDate:v.startDate, endDate:v.endDate, checkin:v.checkin, checkout:v.checkout, lat:v.lat, lon:v.lon });
+      Object.assign(t, { name:v.name, location:v.location, site:v.site, parkPhone:v.parkPhone, startDate:v.startDate, endDate:v.endDate, checkin:v.checkin, checkout:v.checkout, lat:v.lat, lon:v.lon });
       liveWxCache = null; save(); logActivity("updated the trip details"); render(); toast("Trip updated");
     }, extraFooter: true });
     // add a delete-trip control into the modal footer
