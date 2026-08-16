@@ -219,6 +219,18 @@
   .receipt-thumb:hover { box-shadow: var(--md-e1); }
   .receipt-thumb:active { transform: scale(.94); }
   .receipt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .receipt-thumb.lg { width: 64px; height: 64px; border-radius: 12px; }
+  .receipt-thumb.lg.empty { display: flex; align-items: center; justify-content: center; text-align: center;
+    color: var(--muted); font-size: .68rem; line-height: 1.1; cursor: default; }
+  .receipt-items { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .ri-row { display: flex; justify-content: space-between; gap: 10px; font-size: .86rem; color: var(--muted); }
+  .ri-row span:first-child { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-list { display: flex; flex-direction: column; gap: 2px; }
+  .link-row { display: flex; align-items: center; gap: 11px; padding: 9px 6px; border-radius: 10px; cursor: pointer; }
+  .link-row:hover { background: var(--surface-2); }
+  .link-main { display: flex; flex-direction: column; min-width: 0; }
+  .link-name { color: var(--ink); font-weight: 500; }
+  .link-sub { color: var(--muted); font-size: .8rem; }
   .receipt-prev { width: 100%; max-width: 240px; min-height: 96px; border-radius: 14px; border: 1px dashed var(--border-strong);
     display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--surface-2); color: var(--muted); font-size: .84rem; }
   .receipt-prev.has-img { border-style: solid; }
@@ -899,6 +911,7 @@
     state.trips.forEach(t => {
       ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people","todos"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
       if (typeof t.notes !== "string") t.notes = "";
+      ensureReceipts(t);
     });
     if (state.theme !== "light" && state.theme !== "dark") { state.theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; }
     applyTheme();
@@ -2302,7 +2315,7 @@
         const among = (e.splitAmong && e.splitAmong.length) ? e.splitAmong : trip.people.map(p=>p.id);
         html += '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(e.description||"Expense")+'</div>' +
           '<div class="row-sub">Paid by '+esc(personName(trip,e.paidBy)||"?")+' · split '+among.length+' way'+(among.length===1?"":"s")+(e.date?' · '+esc(fmtDate(e.date,"md")):"")+'</div></div>' +
-          (e.receipt?'<button class="receipt-thumb" data-action="view-receipt" data-id="'+e.id+'" title="View receipt"><img src="'+esc(e.receipt)+'" alt="Receipt"></button>':"") +
+          receiptThumb(trip, e.receiptId) +
           '<span class="pill muted num" style="font-family:var(--font-mono)">'+money(e.amount)+'</span>' +
           rowActions("edit-expense","del-expense",e.id) + '</div>';
       });
@@ -2317,11 +2330,45 @@
         const among = (s.splitAmong && s.splitAmong.length) ? s.splitAmong : trip.people.map(p=>p.id);
         html += '<div class="row-item"><div class="row-main"><div class="row-title">'+esc(s.item)+'</div>' +
           '<div class="row-sub">Paid by '+esc(personName(trip,s.paidBy)||"?")+' · split '+among.length+' way'+(among.length===1?"":"s")+'</div></div>' +
+          receiptThumb(trip, s.receiptId) +
           '<button class="pill green" data-action="shop-price" data-id="'+s.id+'" title="Edit price">'+money(s.price)+'</button></div>';
       });
       html += '</div></div>';
     }
+
+    // receipts — one photo can cover many purchases
+    const receipts = trip.receipts || [];
+    html += '<div class="section-title"><h3>Receipts</h3>'+addBtn("add-receipt","Add receipt")+'</div>';
+    if (!receipts.length) {
+      html += '<div class="card card-pad" style="color:var(--muted)">No receipts yet. Add one photo, then tick which purchases it covers — handy when a single receipt paid for several items.</div>';
+    } else {
+      html += '<div class="grid cols-2">';
+      receipts.forEach(r => {
+        const items = receiptItems(trip, r.id);
+        const n = items.length;
+        html += '<div class="card card-pad">' +
+          '<div style="display:flex;gap:12px;align-items:flex-start">' +
+            (r.photo ? '<button class="receipt-thumb lg" data-action="view-receipt-id" data-id="'+r.id+'" title="View receipt"><img src="'+esc(r.photo)+'" alt="Receipt"></button>'
+                     : '<span class="receipt-thumb lg empty">No<br>photo</span>') +
+            '<div style="flex:1;min-width:0"><div class="row-title">'+esc(r.store||"Receipt")+'</div>' +
+              '<div class="row-sub">covers '+n+' item'+(n===1?"":"s")+'</div></div>' +
+          '</div>' +
+          (n ? '<div class="receipt-items">'+items.map(it=>'<div class="ri-row"><span>'+esc(it.name)+'</span><span class="num">'+money(it.amount)+'</span></div>').join("")+'</div>' : "") +
+          '<div style="display:flex;gap:8px;margin-top:12px">' +
+            '<button class="btn sm primary" data-action="link-receipt" data-id="'+r.id+'">Choose items</button>' +
+            '<button class="btn sm" data-action="edit-receipt" data-id="'+r.id+'">Edit</button>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
     return html;
+  }
+  function receiptThumb(trip, rid) {
+    if (!rid) return "";
+    const r = findById(trip.receipts||[], rid);
+    if (!r || !r.photo) return "";
+    return '<button class="receipt-thumb" data-action="view-receipt-id" data-id="'+r.id+'" title="View receipt"><img src="'+esc(r.photo)+'" alt="Receipt"></button>';
   }
   function expenseFields(trip) {
     return [
@@ -2330,7 +2377,6 @@
       { key:"paidBy", label:"Paid by", type:"person" },
       { key:"date", label:"Date", type:"date" },
       { key:"splitAmong", label:"Split among", type:"multiperson", hint:"Everyone selected splits this evenly." },
-      { key:"receipt", label:"Receipt photo", type:"receipt", hint:"Snap or upload a photo of the receipt (optional)." },
     ];
   }
   function shoppingSpent(trip) {
@@ -2364,6 +2410,58 @@
       if (debtors[i].amt < 0.01) i++; if (creditors[j].amt < 0.01) j++;
     }
     return out;
+  }
+
+  /* ---------- Receipts ---------- */
+  function receiptFields() {
+    return [
+      { key:"photo", label:"Receipt photo", type:"receipt", hint:"Snap or upload the receipt." },
+      { key:"store", label:"Store / label (optional)", type:"text", placeholder:"e.g. Costco, Aug 20" },
+    ];
+  }
+  // Every purchase (expense or bought shopping item) linked to this receipt id.
+  function receiptItems(trip, rid) {
+    const out = [];
+    (trip.budget||[]).forEach(e => { if (e.receiptId === rid) out.push({ kind:"budget", id:e.id, name:e.description||"Expense", amount:Number(e.amount)||0 }); });
+    (trip.shopping||[]).forEach(s => { if (s.receiptId === rid) out.push({ kind:"shop", id:s.id, name:s.item, amount:Number(s.price)||0 }); });
+    return out;
+  }
+  // Modal: tick which purchases this one receipt paid for.
+  function openReceiptLinker(receipt) {
+    const t = activeTrip();
+    const rows = [];
+    (t.budget||[]).forEach(e => rows.push({ kind:"budget", id:e.id, name:e.description||"Expense", sub:"Expense", amount:Number(e.amount)||0 }));
+    (t.shopping||[]).forEach(s => { if (s.gotIt) rows.push({ kind:"shop", id:s.id, name:s.item, sub:"Shopping", amount:Number(s.price)||0 }); });
+    const objOf = it => (it.kind==="budget" ? findById(t.budget, it.id) : findById(t.shopping, it.id));
+    const overlay = document.getElementById("overlay");
+    const body = rows.length ? rows.map(it => {
+      const o = objOf(it);
+      const on = o && o.receiptId === receipt.id;
+      const other = o && o.receiptId && o.receiptId !== receipt.id;
+      return '<label class="link-row">' +
+        '<input type="checkbox" class="check" data-kind="'+it.kind+'" data-id="'+it.id+'"'+(on?" checked":"")+'>' +
+        '<span class="link-main"><span class="link-name">'+esc(it.name)+'</span>' +
+        '<span class="link-sub">'+esc(it.sub)+(it.amount?' · '+money(it.amount):"")+(other?' · on another receipt':"")+'</span></span>' +
+        '</label>';
+    }).join("") : '<p style="color:var(--muted);margin:0">No purchases to link yet. Mark shopping items as bought, or add expenses first.</p>';
+    overlay.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-head"><h3>Items on this receipt</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
+        '<div class="modal-body"><p class="hint" style="margin:0 0 12px">Tick everything this one receipt paid for.</p><div class="link-list">'+body+'</div></div>' +
+        '<div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="linkSave">Save</button></div>' +
+      '</div>';
+    overlay.classList.add("open");
+    const saveBtn = document.getElementById("linkSave");
+    if (saveBtn) saveBtn.addEventListener("click", () => {
+      overlay.querySelectorAll('.link-row input[type="checkbox"]').forEach(cb => {
+        const arr = cb.dataset.kind==="budget" ? t.budget : t.shopping;
+        const o = findById(arr, cb.dataset.id);
+        if (!o) return;
+        if (cb.checked) o.receiptId = receipt.id;
+        else if (o.receiptId === receipt.id) o.receiptId = "";
+      });
+      closeModal(); save(); render(); toast("Receipt updated");
+    });
   }
 
   /* ---------- Notes & Checklist ---------- */
@@ -2505,10 +2603,13 @@
         save(); logActivity("removed "+(person?person.name:"someone")+" from the crew"); render(); toast("Removed"); }, "Remove"); },
 
     // budget
-    "add-expense": () => { const t = activeTrip(); if(!t.people.length){toast("Add people first");return;} openForm({ title:"Add expense", fields: expenseFields(t), values:{ paidBy:(t.people[0]||{}).id, splitAmong:t.people.map(p=>p.id) }, onSubmit: v => { t.budget.push({id:uid(), description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong, receipt:v.receipt||""}); save(); logActivity("added expense “"+v.description+"” ("+money(Number(v.amount)||0)+")"); render(); toast("Expense added"); } }); },
-    "edit-expense": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); openForm({ title:"Edit expense", fields: expenseFields(t), values:e, onSubmit: v => { Object.assign(e, {description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong, receipt:v.receipt||""}); save(); logActivity("edited expense “"+e.description+"”"); render(); }, onDelete: () => delItem("budget", e.id, "Delete this expense?") }); },
+    "add-expense": () => { const t = activeTrip(); if(!t.people.length){toast("Add people first");return;} openForm({ title:"Add expense", fields: expenseFields(t), values:{ paidBy:(t.people[0]||{}).id, splitAmong:t.people.map(p=>p.id) }, onSubmit: v => { t.budget.push({id:uid(), description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("added expense “"+v.description+"” ("+money(Number(v.amount)||0)+")"); render(); toast("Expense added"); } }); },
+    "edit-expense": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); openForm({ title:"Edit expense", fields: expenseFields(t), values:e, onSubmit: v => { Object.assign(e, {description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("edited expense “"+e.description+"”"); render(); }, onDelete: () => delItem("budget", e.id, "Delete this expense?") }); },
     "del-expense": (el) => delItem("budget", el.dataset.id, "Delete this expense?"),
-    "view-receipt": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); if (e && e.receipt) openLightbox(e.receipt, e.description||"Receipt"); },
+    "view-receipt-id": (el) => { const t = activeTrip(); const r = findById(t.receipts||[], el.dataset.id); if (r && r.photo) openLightbox(r.photo, r.store||"Receipt"); },
+    "add-receipt": () => { const t = activeTrip(); openForm({ title:"Add receipt", submitLabel:"Add", fields: receiptFields(), values:{}, onSubmit: v => { const r = { id:uid(), photo:v.photo||"", store:v.store||"", ts:Date.now() }; t.receipts = t.receipts || []; t.receipts.push(r); save(); logActivity("added a receipt"+(v.store?" ("+v.store+")":"")); render(); openReceiptLinker(r); } }); },
+    "edit-receipt": (el) => { const t = activeTrip(); const r = findById(t.receipts||[], el.dataset.id); if(!r) return; openForm({ title:"Edit receipt", fields: receiptFields(), values:{photo:r.photo, store:r.store}, onSubmit: v => { r.photo=v.photo||""; r.store=v.store||""; save(); render(); }, onDelete: () => { confirmDialog("Delete receipt?", "The photo is removed and its items are unlinked. The items themselves stay.", () => { (t.budget||[]).forEach(e=>{ if(e.receiptId===r.id) e.receiptId=""; }); (t.shopping||[]).forEach(s=>{ if(s.receiptId===r.id) s.receiptId=""; }); t.receipts = t.receipts.filter(x=>x.id!==r.id); save(); render(); toast("Receipt deleted"); }); } }); },
+    "link-receipt": (el) => { const r = findById(activeTrip().receipts||[], el.dataset.id); if (r) openReceiptLinker(r); },
 
     // checklist
     "toggle-check": (el) => { const c = findById(activeTrip().checklist, el.dataset.id); c.done = el.checked; save(); logActivity((el.checked?"completed":"reopened")+" checklist: “"+c.text+"”"); render(); },
@@ -3100,6 +3201,19 @@
     (t.packing || []).forEach(p => { if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; });
     (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (typeof s.store !== "string") s.store = ""; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
     (t.schedule || []).forEach(s => { if (!s.type) s.type = schedTypeGuess(s.activity); });
+    ensureReceipts(t);
+  }
+  // Receipts are first-class objects that many purchases can point at via receiptId.
+  // Older expenses stored the photo inline on e.receipt — fold those into a receipt object.
+  function ensureReceipts(t) {
+    if (!Array.isArray(t.receipts)) t.receipts = [];
+    (t.budget || []).forEach(e => {
+      if (e.receipt && !e.receiptId) {
+        const r = { id: uid(), photo: e.receipt, store: e.description || "", ts: Date.now() };
+        t.receipts.push(r); e.receiptId = r.id;
+      }
+      if ("receipt" in e) delete e.receipt;
+    });
   }
   function schedTypeGuess(activity) {
     const a = (activity||"").toLowerCase();
@@ -3143,7 +3257,7 @@
       // update existing trips in place (preserves object refs held by open editors), add new ones.
       // Nested item arrays are merged by id so refs an open editor holds (e.g. a shopping item
       // being priced) stay live — otherwise the editor would write to a detached, replaced object.
-      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","todos"];
+      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","todos","receipts"];
       remoteTrips.forEach(rt => {
         const lt = state.trips.find(t => t.id === rt.id);
         if (lt) { NESTED.forEach(k => { if (Array.isArray(rt[k])) rt[k] = mergeById(lt[k], rt[k]); }); Object.assign(lt, rt); }
