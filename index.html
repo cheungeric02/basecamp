@@ -451,10 +451,12 @@
   .sched-wx { margin-left: auto; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--muted); }
   .sched-jumpbar { position: sticky; top: 0; z-index: 6; background: var(--bg); padding: 8px 0; margin: 2px 0 6px; }
 
-  .settle { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: .95rem; }
+  .settle { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: .95rem; flex-wrap: wrap; }
   .settle:last-child { border-bottom: none; }
   .settle .arrow { color: var(--muted); }
   .settle .amt { margin-left: auto; font-family: var(--font-mono); font-weight: 600; }
+  .settle .settle-btn { flex: none; white-space: nowrap; }
+  .settle .settle-btn svg { width: 15px; height: 15px; }
 
   /* ---------- Modal ---------- */
   .overlay { position: fixed; inset: 0; background: rgba(20,24,18,.5); backdrop-filter: blur(3px);
@@ -719,6 +721,8 @@
     explore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>',
     star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>',
+    check2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
     chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
     wx_sun: '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>',
     wx_cloud: '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6.5 19Z"/></svg>',
@@ -955,7 +959,7 @@
   function blankTrip(name) {
     return { id: uid(), name: name || "New Trip", location: "", site: "", startDate: "", endDate: "",
       people: [], weather: [], meals: [], shopping: [], roles: [], schedule: [], packing: [],
-      guests: [], budget: [], notes: "", checklist: [], personalPacking: {} };
+      guests: [], budget: [], settlements: [], notes: "", checklist: [], personalPacking: {} };
   }
 
   function init() {
@@ -967,7 +971,7 @@
     }
     // migrate: ensure fields exist
     state.trips.forEach(t => {
-      ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people","todos"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
+      ["weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","people","todos"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
       if (typeof t.notes !== "string") t.notes = "";
       ensureReceipts(t);
     });
@@ -1160,14 +1164,14 @@
     document.addEventListener("keydown", onKey);
     document.body.appendChild(box);
   }
-  function confirmDialog(title, msg, onYes, yesLabel) {
+  function confirmDialog(title, msg, onYes, yesLabel, yesTone) {
     const overlay = document.getElementById("overlay");
     overlay.innerHTML =
       '<div class="modal" role="dialog" aria-modal="true" style="max-width:400px">' +
         '<div class="modal-head"><h3>'+esc(title)+'</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
         '<div class="modal-body"><p style="margin:0;color:var(--muted)">'+esc(msg)+'</p></div>' +
         '<div class="modal-foot"><button class="btn ghost" data-close>Cancel</button>' +
-        '<button class="btn danger" id="confirmYes">'+esc(yesLabel||"Delete")+'</button></div>' +
+        '<button class="btn '+(yesTone||"danger")+'" id="confirmYes">'+esc(yesLabel||"Delete")+'</button></div>' +
       '</div>';
     overlay.classList.add("open");
     document.getElementById("confirmYes").addEventListener("click", () => { closeModal(); onYes(); });
@@ -1392,9 +1396,16 @@
     else if (du <= 0 && dueEnd >= 0) { countVal = "Now"; countTitle = "Trip in progress"; countSub = "Wraps " + fmtDate(trip.endDate,"long"); pillClass="green"; }
     else { countVal = "✓"; countTitle = "Trip complete"; countSub = "Hope it was a good one"; pillClass="muted"; }
 
-    const packedTotal = trip.packing.length;
-    const packedDone = trip.packing.filter(x=>x.packed).length;
+    const who = whoAmI();
+    const myPackList = (who && trip.personalPacking && Array.isArray(trip.personalPacking[who])) ? trip.personalPacking[who] : [];
+    const groupPackTotal = trip.packing.length;
+    const groupPackDone = trip.packing.filter(itemComplete).length;
+    const persPackTotal = myPackList.length;
+    const persPackDone = myPackList.filter(x=>x.packed).length;
+    const packedTotal = groupPackTotal + persPackTotal;
+    const packedDone = groupPackDone + persPackDone;
     const packPct = packedTotal ? Math.round(packedDone/packedTotal*100) : 0;
+    const packSub = persPackTotal ? packedDone+" of "+packedTotal+" · you + group" : packedDone+" of "+packedTotal+" packed";
     const mealsPlanned = trip.meals.filter(m=>m.name).length;
     const guestsYes = trip.guests.filter(g=>g.rsvp==="Yes").length;
     const shopLeft = trip.shopping.filter(x=>!x.gotIt).length;
@@ -1441,7 +1452,7 @@
     '</div>';
     html += '<div class="grid cols-3 section-block">' +
       countdownTile +
-      statTile("Packing", '<span class="num">'+packPct+'%</span>', packedDone+" of "+packedTotal+" packed", "", packPct) +
+      statTile("Packing", '<span class="num">'+packPct+'%</span>', packSub, "", packPct) +
       mealTile +
     '</div>';
 
@@ -2456,10 +2467,24 @@
     html += '<div class="section-block"><div class="section-title"><h3>Settle up</h3><span class="label">'+(settle.length ? settle.length+" payment"+(settle.length===1?"":"s") : "Fewest transfers")+'</span></div><div class="card card-pad">';
     if (!itemCount) html += '<p style="color:var(--muted);margin:0">Add an expense, or price a bought shopping item, to see who owes whom.</p>';
     else if (!settle.length) html += '<p style="color:var(--accent-ink);margin:0">All square — everyone\'s even.</p>';
-    else html += '<p class="row-sub" style="margin:0 0 12px">Balances are netted to the fewest possible transfers — nobody both pays and gets paid.</p>' + settle.map(s => '<div class="settle">'+avatarById(trip, s.fromId)+'<span>'+esc(s.fromName)+'</span>' +
+    else html += '<p class="row-sub" style="margin:0 0 12px">Balances are netted to the fewest possible transfers — nobody both pays and gets paid. Tap “Settled up” once a payment has actually been made.</p>' + settle.map(s => '<div class="settle">'+avatarById(trip, s.fromId)+'<span>'+esc(s.fromName)+'</span>' +
       '<span class="arrow">→ pays →</span>'+avatarById(trip, s.toId)+'<span>'+esc(s.toName)+'</span>' +
-      '<span class="amt">'+money(s.amount)+'</span></div>').join("");
+      '<span class="amt">'+money(s.amount)+'</span>' +
+      '<button class="btn sm primary settle-btn" data-action="settle-pay" data-from="'+s.fromId+'" data-to="'+s.toId+'" data-amt="'+s.amount+'">'+I.check2+' Settled up</button></div>').join("");
     html += '</div></div>';
+
+    // record of payments already made (undoable)
+    const settlements = trip.settlements || [];
+    if (settlements.length) {
+      html += '<div class="section-block"><div class="section-title"><h3>Settled payments</h3><span class="label">'+settlements.length+' recorded</span></div><div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
+      settlements.slice().reverse().forEach(s => {
+        html += '<div class="row-item"><div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'+avatarById(trip, s.fromId)+'<span>'+esc(personName(trip,s.fromId)||"?")+'</span><span class="arrow" style="color:var(--muted);font-size:.85rem">paid</span>'+avatarById(trip, s.toId)+'<span>'+esc(personName(trip,s.toId)||"?")+'</span></div>' +
+          (s.date?'<div class="row-sub">'+esc(fmtDate(s.date,"md"))+'</div>':"") + '</div>' +
+          '<span class="pill green num" style="font-family:var(--font-mono)">'+money(s.amount)+'</span>' +
+          '<button class="icon-btn" data-action="unsettle-pay" data-id="'+s.id+'" title="Undo this payment">'+I.undo+'</button></div>';
+      });
+      html += '</div></div></div>';
+    }
 
     // manual expenses
     html += '<div class="section-title"><h3>Expenses</h3></div>';
@@ -2553,6 +2578,12 @@
       const share = amt / among.length;
       if (bal[e.paidBy] != null) bal[e.paidBy] += amt;
       among.forEach(id => { bal[id] -= share; });
+    });
+    // Cash already handed over between people: A→B settles A's debt and B's credit.
+    (trip.settlements||[]).forEach(s => {
+      const amt = Number(s.amount)||0; if (!amt) return;
+      if (bal[s.fromId] != null) bal[s.fromId] += amt;
+      if (bal[s.toId] != null) bal[s.toId] -= amt;
     });
     const debtors = [], creditors = [];
     Object.keys(bal).forEach(id => { const v = Math.round(bal[id]*100)/100; if (v < -0.01) debtors.push({id, amt:-v}); else if (v > 0.01) creditors.push({id, amt:v}); });
@@ -2765,6 +2796,13 @@
     "add-expense": () => { const t = activeTrip(); if(!t.people.length){toast("Add people first");return;} openForm({ title:"Add expense", fields: expenseFields(t), values:{ paidBy:(t.people[0]||{}).id, splitAmong:t.people.map(p=>p.id) }, onSubmit: v => { t.budget.push({id:uid(), description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("added expense “"+v.description+"” ("+money(Number(v.amount)||0)+")"); render(); toast("Expense added"); } }); },
     "edit-expense": (el) => { const t = activeTrip(); const e = findById(t.budget, el.dataset.id); openForm({ title:"Edit expense", fields: expenseFields(t), values:e, onSubmit: v => { Object.assign(e, {description:v.description, amount:Number(v.amount)||0, paidBy:v.paidBy, date:v.date, splitAmong:v.splitAmong}); save(); logActivity("edited expense “"+e.description+"”"); render(); }, onDelete: () => delItem("budget", e.id, "Delete this expense?") }); },
     "del-expense": (el) => delItem("budget", el.dataset.id, "Delete this expense?"),
+    "settle-pay": (el) => { const t = activeTrip(); const fromId = el.dataset.from, toId = el.dataset.to, amt = Number(el.dataset.amt)||0; const fromN = personName(t, fromId)||"Someone", toN = personName(t, toId)||"someone";
+      confirmDialog("Mark as settled?", fromN+" paid "+toN+" "+money(amt)+". This clears it from who-owes-whom (you can undo it below).", () => {
+        if (!Array.isArray(t.settlements)) t.settlements = [];
+        t.settlements.push({ id:uid(), fromId, toId, amount:amt, date:todayISO() });
+        save(); logActivity(fromN+" settled up "+money(amt)+" with "+toN); render(); toast("Marked settled"); }, "Mark settled", "primary"); },
+    "unsettle-pay": (el) => { const t = activeTrip(); if (!Array.isArray(t.settlements)) return; const s = findById(t.settlements, el.dataset.id); const label = s ? ((personName(t,s.fromId)||"?")+" → "+(personName(t,s.toId)||"?")+" "+money(s.amount)) : "this payment";
+      confirmDialog("Undo payment?", "Remove the settled payment ("+label+")? It'll go back into who-owes-whom.", () => { t.settlements = t.settlements.filter(x=>x.id!==el.dataset.id); save(); render(); toast("Payment removed"); }, "Undo it", "primary"); },
     "view-receipt-id": (el) => { const t = activeTrip(); const r = findById(t.receipts||[], el.dataset.id); if (r && r.photo) openLightbox(r.photo, r.store||"Receipt"); },
     "add-receipt": () => { const t = activeTrip(); openForm({ title:"Add receipt", submitLabel:"Add", fields: receiptFields(), values:{}, onSubmit: v => { const r = { id:uid(), photo:v.photo||"", store:v.store||"", ts:Date.now() }; t.receipts = t.receipts || []; t.receipts.push(r); save(); logActivity("added a receipt"+(v.store?" ("+v.store+")":"")); render(); openReceiptLinker(r); } }); },
     "edit-receipt": (el) => { const t = activeTrip(); const r = findById(t.receipts||[], el.dataset.id); if(!r) return; openForm({ title:"Edit receipt", fields: receiptFields(), values:{photo:r.photo, store:r.store}, onSubmit: v => { r.photo=v.photo||""; r.store=v.store||""; save(); render(); }, onDelete: () => { confirmDialog("Delete receipt?", "The photo is removed and its items are unlinked. The items themselves stay.", () => { (t.budget||[]).forEach(e=>{ if(e.receiptId===r.id) e.receiptId=""; }); (t.shopping||[]).forEach(s=>{ if(s.receiptId===r.id) s.receiptId=""; }); t.receipts = t.receipts.filter(x=>x.id!==r.id); save(); render(); toast("Receipt deleted"); }); } }); },
@@ -3482,7 +3520,7 @@
     return /(water|juice|soda|\bpop\b|cola|beer|wine|coffee|tea|lemonade|gatorade|cider|cocktail|vodka|whisk|\brum\b|seltzer|sparkling|\bmilk\b|drink|\bale\b|smoothie)/i.test(name || "") ? "Drinks" : "Food";
   }
   function ensureShape(t) {
-    ["weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","people"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
+    ["weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","people"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
     if (typeof t.notes !== "string") t.notes = "";
     if (!t.personalPacking || typeof t.personalPacking !== "object" || Array.isArray(t.personalPacking)) t.personalPacking = {};
     (t.packing || []).forEach(p => { if (!Array.isArray(p.personIds)) p.personIds = p.personId ? [p.personId] : []; });
@@ -3544,7 +3582,7 @@
       // update existing trips in place (preserves object refs held by open editors), add new ones.
       // Nested item arrays are merged by id so refs an open editor holds (e.g. a shopping item
       // being priced) stay live — otherwise the editor would write to a detached, replaced object.
-      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","checklist","todos","receipts"];
+      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","todos","receipts"];
       remoteTrips.forEach(rt => {
         const lt = state.trips.find(t => t.id === rt.id);
         if (lt) { NESTED.forEach(k => { if (Array.isArray(rt[k])) rt[k] = mergeById(lt[k], rt[k]); }); Object.assign(lt, rt); }
