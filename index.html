@@ -1304,11 +1304,6 @@
     const n = personName(trip, id); if (!n) return '<span class="pill muted">Unassigned</span>';
     return avatarById(trip, id);
   }
-  function personSelectInline(trip, currentId, action, id) {
-    const opts = '<option value="">— Unassigned —</option>' + (trip.people||[]).map(p =>
-      '<option value="'+p.id+'"'+(p.id===currentId?" selected":"")+'>'+esc(p.name)+'</option>').join("");
-    return '<select class="inline-select" data-action="'+action+'" data-id="'+id+'" aria-label="Assign a person">'+opts+'</select>';
-  }
 
   function renderSection() {
     if (ui.section === "tracker" && !isAdmin()) ui.section = "overview";
@@ -1539,11 +1534,6 @@
       card += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">'+body+'</div></div>';
     }
     return card + '</div>';
-  }
-  function glanceRow(label, val, section) {
-    return '<button class="row-item" data-action="nav" data-section="'+section+'" style="width:100%;background:none;border-left:none;border-right:none;border-top:none;text-align:left;cursor:pointer">' +
-      '<span class="row-main"><span class="row-title" style="font-weight:400">'+esc(label)+'</span></span>' +
-      '<span class="pill muted">'+esc(val)+'</span></button>';
   }
 
   /* ---------- Weather ---------- */
@@ -3035,12 +3025,6 @@
     else if (kind==="fog") inner = cloud(32,22,0.85,CLOUD) + '<g stroke="'+CLOUD+'" stroke-width="3.4" stroke-linecap="round"><line class="wxa-fog" x1="18" y1="42" x2="46" y2="42"/><line class="wxa-fog2" x1="16" y1="49" x2="44" y2="49"/><line class="wxa-fog3" x1="20" y1="56" x2="42" y2="56"/></g>';
     else inner = cloud(32,34,1.05,CLOUD);
     return '<span class="wx-ic" style="width:'+size+'px;height:'+size+'px"><svg viewBox="0 0 64 64" width="'+size+'" height="'+size+'">'+inner+'</svg></span>';
-  }
-  // Icon + temps + condition row for a daily forecast card.
-  function wxBody(kind, hi, lo, cond) {
-    return '<div style="display:flex;align-items:center;gap:12px">' + wxIcon(kind, 46) +
-      '<div style="min-width:0"><div class="temps" style="margin:0"><span class="hi">'+hi+'°</span><span class="lo"> / '+lo+'°</span></div>' +
-      '<div class="cond" style="margin-top:2px">'+cond+'</div></div></div>';
   }
   // Full-box weather "scene": gradient background + auto-contrast ink per condition.
   function wxScene(kind) {
