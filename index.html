@@ -1233,7 +1233,7 @@
     return '<aside class="sidebar">' +
       '<div class="trip-switch">' +
         '<select data-action="switch-trip" aria-label="Active trip">' +
-          state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 Locked trip" : t.name)+'</option>'; }).join("") +
+          state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 " + t.name : t.name)+'</option>'; }).join("") +
         '</select>' +
         '<div class="row">' +
           '<button class="btn sm" data-action="new-trip" style="flex:1">'+I.plus+' New trip</button>' +
@@ -1263,7 +1263,7 @@
     html += '<div class="section-title"><h3>Trip</h3></div>';
     html += '<div class="card card-pad" style="display:flex;flex-direction:column;gap:12px">' +
       '<select data-action="switch-trip" aria-label="Active trip" style="'+selStyle+'">' +
-        state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 Locked trip" : t.name)+'</option>'; }).join("") +
+        state.trips.map(t => { const locked = t.lockHash && !isTripUnlocked(t); return '<option value="'+t.id+'"'+(t.id===trip.id?" selected":"")+'>'+esc(locked ? "🔒 " + t.name : t.name)+'</option>'; }).join("") +
       '</select>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn primary" data-action="new-trip">'+I.plus+' New trip</button>' +
