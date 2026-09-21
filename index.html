@@ -466,6 +466,18 @@
     box-shadow: var(--shadow-lg); width: 100%; max-width: 500px; max-height: 88vh; overflow-y: auto;
     transform: translateY(8px) scale(.98); transition: transform .15s; }
   .overlay.open .modal { transform: none; }
+  /* Patch notes / What's New — shared by Settings list and the popup */
+  .patch-list { display: flex; flex-direction: column; gap: 14px; }
+  .patch-entry { padding: 13px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
+  .patch-entry.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .patch-entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .patch-v { font-family: var(--font-mono, monospace); font-weight: 700; font-size: .82rem; color: var(--accent-ink); background: var(--accent-weak, var(--surface)); border: 1px solid var(--border); padding: 1px 8px; border-radius: 999px; }
+  .patch-entry.current .patch-v { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .patch-badge { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #fff; background: var(--accent); padding: 2px 8px; border-radius: 999px; }
+  .patch-date { margin-left: auto; font-size: .8rem; color: var(--muted); }
+  .patch-title { font-weight: 700; font-size: .98rem; margin-bottom: 4px; }
+  .patch-notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+  .patch-notes li { font-size: .9rem; color: var(--muted); line-height: 1.4; }
   .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px;
     border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
   .modal-head h3 { font-family: var(--font-display); font-size: 1.25rem; }
@@ -685,6 +697,67 @@
   ========================================================= */
 
   const LS_KEY = "basecamp.v1";
+  // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
+  const APP_VERSION = 17;
+  // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
+  const SEEN_VER_KEY = "basecamp_lastSeenVer";
+  // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
+  const PATCH_NOTES = [
+    { v: 17, date: "2026-09-21", title: "Patch Notes & What’s New", notes: [
+      "Added a Patch Notes list in Settings so you can see everything that’s changed.",
+      "A one-time “What’s New” popup now shows what’s changed since you last opened the app." ] },
+    { v: 16, date: "2026-09-16", title: "Clearer locked trips", notes: [
+      "Locked trips now show their name (with a 🔒) in the trip switcher instead of all reading “Locked trip”.",
+      "Tidied up some unused internal code." ] },
+    { v: 15, date: "2026-08-27", title: "Smarter packing % & Budget settle-up", notes: [
+      "The Overview packing bar now counts your personal list along with the group’s.",
+      "Added a “Settled up” button in Budget to record a payment and clear it from who-owes-whom." ] },
+    { v: 14, date: "2026-08-16", title: "Fairer group packing", notes: [
+      "Shared items now track how many are needed and who’s bringing how many.",
+      "An item only shows as done once everyone assigned has packed their part." ] },
+    { v: 13, date: "2026-08-16", title: "Weather & receipt upgrades", notes: [
+      "Tap a forecast day to see it hour by hour, with an icon on each hour.",
+      "One receipt photo can now cover several purchases.",
+      "Added a Park office card to the Info tab." ] },
+    { v: 12, date: "2026-08-15", title: "Budget fixes", notes: [
+      "Add receipt photos to expenses.",
+      "Fixed shopping prices being lost after checking an item off.",
+      "Fixed a misleading carpool seat count." ] },
+    { v: 11, date: "2026-08-14", title: "Offline & daylight", notes: [
+      "Works offline and installs as an app.",
+      "New Daylight card with a live sun position, plus a “trail to camp” countdown.",
+      "Shopping groups by store, checked items sink to a Done section, and the schedule shows 12-hour times." ] },
+    { v: 10, date: "2026-08-07", title: "Expressive weather", notes: [
+      "Full-box animated weather scenes and livelier icons.",
+      "Guest photos on the Guests tab." ] },
+    { v: 9, date: "2026-08-07", title: "More planning tools", notes: [
+      "New “Things to Do” tab that suggests notable spots nearby.",
+      "Added a carpool coordinator and a “Your Jobs” summary on the Overview.",
+      "Smarter Schedule with now / up-next and weather headers." ] },
+    { v: 8, date: "2026-07-31", title: "Meals ↔ Shopping", notes: [
+      "Meal ingredients now sync straight to the Shopping list.",
+      "Shopping categories are collapsible and split Food from Drinks." ] },
+    { v: 7, date: "2026-07-31", title: "Info tab overhaul", notes: [
+      "Info tab now shows the forecast, check-in/out times, and park & emergency info.",
+      "Warmer, higher-contrast dark theme." ] },
+    { v: 6, date: "2026-07-30", title: "A fresh look", notes: [
+      "Full Material 3 visual redesign across the app.",
+      "Added a Settings page and Backup/Restore." ] },
+    { v: 5, date: "2026-07-30", title: "Trips & privacy", notes: [
+      "Per-trip password lock and a “who are you?” name picker.",
+      "Per-trip activity tracker; the browser tab title follows the active trip." ] },
+    { v: 4, date: "2026-07-23", title: "Countdown", notes: [
+      "Added a days-to-go countdown to the Overview.",
+      "Fixed cramped meal rows on mobile." ] },
+    { v: 3, date: "2026-07-22", title: "Weather & personal packing", notes: [
+      "Added live weather (Open-Meteo) and an admin activity tracker.",
+      "Personal packing lists per person; items can have multiple bringers." ] },
+    { v: 2, date: "2026-07-22", title: "Sharing & mobile", notes: [
+      "Live collaboration so the whole group shares one plan.",
+      "Mobile bottom tab bar, inline person pickers, and shopping prices that split into the budget." ] },
+    { v: 1, date: "2026-07-22", title: "First launch", notes: [
+      "The original Bon Echo trip planner: meals, shopping, packing, roles, schedule, guests, and budget." ] }
+  ];
   const uid = (() => { let n = 0; return () => (Date.now().toString(36) + (n++).toString(36) + Math.floor(Math.random()*1e6).toString(36)); })();
 
   /* ---------- Icons ---------- */
@@ -964,6 +1037,7 @@
 
   function init() {
     state = load();
+    const freshInstall = !state;   // very first load: nothing was ever saved on this device
     if (!state || !state.trips || !state.trips.length) {
       const t = seedBonEcho();
       state = { trips: [t], activeId: t.id, theme: "auto" };
@@ -979,6 +1053,7 @@
     applyTheme();
     render();
     if (isAdmin()) startActivityWatch();
+    maybeShowWhatsNew(freshInstall);   // once, after the normal load/render
     setTimeout(function () { ensureIdentity(); }, 800);
   }
 
@@ -1177,6 +1252,49 @@
     document.getElementById("confirmYes").addEventListener("click", () => { closeModal(); onYes(); });
   }
 
+  /* ---------- Patch notes / What's New (UI + localStorage only) ---------- */
+  // ONE shared renderer for both the Settings list and the popup entries.
+  function patchEntryHtml(e, isCurrent) {
+    return '<div class="patch-entry'+(isCurrent?" current":"")+'">' +
+      '<div class="patch-entry-head">' +
+        '<span class="patch-v">v'+esc(String(e.v))+'</span>' +
+        (isCurrent?'<span class="patch-badge">Current</span>':"") +
+        '<span class="patch-date">'+esc(fmtDate(e.date)||e.date)+'</span>' +
+      '</div>' +
+      '<div class="patch-title">'+esc(e.title)+'</div>' +
+      '<ul class="patch-notes">'+(e.notes||[]).map(n=>'<li>'+esc(n)+'</li>').join("")+'</ul>' +
+    '</div>';
+  }
+  function readSeenVer() {
+    try { const v = localStorage.getItem(SEEN_VER_KEY); if (v == null) return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; }
+    catch (e) { return null; }
+  }
+  function writeSeenVer(v) { try { localStorage.setItem(SEEN_VER_KEY, String(v)); } catch (e) {} }
+  function showWhatsNew(entries) {
+    const overlay = document.getElementById("overlay"); if (!overlay) return;
+    overlay.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true" style="max-width:460px">' +
+        '<div class="modal-head"><h3>What’s New</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
+        '<div class="modal-body"><div class="patch-list">' +
+          entries.map(e => patchEntryHtml(e, e.v === APP_VERSION)).join("") +
+        '</div></div>' +
+        '<div class="modal-foot"><button class="btn primary" data-close>Got it</button></div>' +
+      '</div>';
+    overlay.classList.add("open");
+  }
+  // Called once at boot, after the first render. freshInstall = app's very first load (no prior data).
+  function maybeShowWhatsNew(freshInstall) {
+    if (freshInstall) { writeSeenVer(APP_VERSION); return; }   // brand-new install: record silently, no popup
+    const seen = readSeenVer();
+    let entries;
+    if (seen == null) entries = PATCH_NOTES.slice(0, 1);         // existing user, pre-feature: latest only
+    else if (seen < APP_VERSION) entries = PATCH_NOTES.filter(e => e.v > seen); // delta since last seen
+    else return;                                                 // already up to date
+    // Stamp the version the moment we decide to show it, so it appears exactly once.
+    writeSeenVer(APP_VERSION);
+    if (entries && entries.length) showWhatsNew(entries);
+  }
+
   /* =========================================================
      RENDER — shell
   ========================================================= */
@@ -1283,6 +1401,10 @@
       (isAdmin() ? '<button class="btn" data-action="import">'+I.upload+' Restore from backup</button>' : "") +
       '<button class="btn" data-action="admin">'+I.lock+' Admin'+(isAdmin()?" — unlocked":"")+'</button>' +
       '</div>';
+    html += '<div class="section-title" style="margin-top:18px"><h3>Patch Notes</h3><span class="label">v'+esc(String(APP_VERSION))+'</span></div>';
+    html += '<div class="card card-pad"><div class="patch-list">' +
+      PATCH_NOTES.map(e => patchEntryHtml(e, e.v === APP_VERSION)).join("") +
+      '</div></div>';
     return html;
   }
 
@@ -3225,6 +3347,8 @@
   function ensureIdentity(force) {
     if (!force && whoAmI()) return;
     if (identityPrompted && !force) return;
+    // Don't stomp an already-open dialog (e.g. the What's New popup at boot); it'll prompt next launch.
+    if (!force) { const ov = document.getElementById("overlay"); if (ov && ov.classList.contains("open")) return; }
     identityPrompted = true;
     const people = (activeTrip().people || []);
     const cur = whoAmI();
