@@ -656,7 +656,7 @@
   /* Nav: expressive pill items + Material active indicator */
   .nav-item { border-radius: 999px; }
   .nav-ind { display: inline-flex; align-items: center; justify-content: center; }
-  .nav-item[data-section="settings"] { display: none; }  /* desktop uses the sidebar chrome instead */
+  /* Settings is a normal nav item on every screen (desktop + mobile). */
 
   /* Expressive theme segmented toggle */
   .theme-seg { display: inline-flex; background: var(--surface-2); border-radius: 999px; padding: 3px; gap: 2px; }
@@ -678,7 +678,6 @@
     /* mobile: move the top chrome into the Settings page */
     .trip-switch, .sidebar-foot { display: none; }
     .sidebar { border-bottom: none; }
-    .nav-item[data-section="settings"] { display: flex; }
   }
 </style>
 </head>
@@ -698,11 +697,13 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 17;
+  const APP_VERSION = 18;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 18, date: "2026-09-21", title: "Settings easier to find", notes: [
+      "Settings is now a normal item in the menu on desktop too, not just on phones — no more hunting for it." ] },
     { v: 17, date: "2026-09-21", title: "Patch Notes & What’s New", notes: [
       "Added a Patch Notes list in Settings so you can see everything that’s changed.",
       "A one-time “What’s New” popup now shows what’s changed since you last opened the app." ] },
