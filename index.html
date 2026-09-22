@@ -679,6 +679,13 @@
     .trip-switch, .sidebar-foot { display: none; }
     .sidebar { border-bottom: none; }
   }
+  /* Desktop: keep a row's title/status column from being starved to one word wide when the
+     right-hand widget (bringers / assign) has a lot of content. Floor the main column and let
+     the right widget shrink and wrap its chips instead. */
+  @media (min-width: 861px) {
+    .row-item .row-main { min-width: 200px; }
+    .row-item .bringers, .row-item .assign-wrap { flex: 0 1 auto; min-width: 0; max-width: 58%; }
+  }
 </style>
 </head>
 <body>
@@ -697,11 +704,14 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 18;
+  const APP_VERSION = 19;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 19, date: "2026-09-22", title: "Weather offline + packing layout fix", notes: [
+      "The last forecast is now saved on your device, so weather still shows something when you're offline (e.g. at the campsite with no signal).",
+      "Fixed a desktop bug where packing items with several people assigned got squished into one word per line." ] },
     { v: 18, date: "2026-09-21", title: "Settings easier to find", notes: [
       "Settings is now a normal item in the menu on desktop too, not just on phones — no more hunting for it." ] },
     { v: 17, date: "2026-09-21", title: "Patch Notes & What’s New", notes: [
@@ -1327,15 +1337,15 @@
     if (trip && trip.lockHash && !isTripUnlocked(trip)) return {};
     return {
       weather: (trip.weather||[]).length,
-      meals: trip.meals.length,
-      shopping: trip.shopping.filter(x=>!x.gotIt).length,
-      roles: trip.roles.length,
-      schedule: trip.schedule.length,
+      meals: (trip.meals||[]).length,
+      shopping: (trip.shopping||[]).filter(x=>!x.gotIt).length,
+      roles: (trip.roles||[]).length,
+      schedule: (trip.schedule||[]).length,
       todo: (trip.todos||[]).length,
-      packing: trip.packing.filter(x=>!x.packed).length,
-      guests: trip.people.length,
-      budget: trip.budget.length,
-      notes: trip.checklist.filter(c=>!c.done).length,
+      packing: (trip.packing||[]).filter(x=>!x.packed).length,
+      guests: (trip.people||[]).length,
+      budget: (trip.budget||[]).length,
+      notes: (trip.checklist||[]).filter(c=>!c.done).length,
     };
   }
 
@@ -1994,24 +2004,44 @@
     });
     return html;
   }
-  let schedWxCache = null, schedWxKey = "";
+  /* ---------- Weather data layer: one fetcher, in-memory + offline cache ---------- */
+  let wxMem = {};                        // "section|lat,lon" -> extracted payload, this session
+  const WX_LS_PREFIX = "basecamp.wx.";   // namespaced so it can't collide with other apps' localStorage
+  // One daily request covers schedule, info and packing (superset of the fields each needs).
+  const DAILY_QS = "daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=16";
+  function wxSave(key, data) { try { localStorage.setItem(WX_LS_PREFIX + key, JSON.stringify({ t: Date.now(), d: data })); } catch (e) {} }
+  function wxLoad(key) { try { const raw = localStorage.getItem(WX_LS_PREFIX + key); if (!raw) return null; const o = JSON.parse(raw); return (o && o.d) ? o.d : null; } catch (e) { return null; } }
+  async function tripCoords(t) {
+    let lat = parseFloat(t.lat), lon = parseFloat(t.lon), place = t.location;
+    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; if (!place) place = g.place; } }
+    if (!(lat && lon)) return null;
+    return { lat: lat, lon: lon, place: place };
+  }
+  // Fetch one Open-Meteo section (daily / sun / hourly / current), caching it in memory and on
+  // this device. If the network is down it falls back to the last forecast saved here so something
+  // still shows. Returns { data, coords, live } or null — `live` is false when served from cache.
+  async function fetchWx(section, qs, field, coords, force) {
+    const key = section + "|" + coords.lat.toFixed(3) + "," + coords.lon.toFixed(3);
+    if (!force && wxMem[key]) return { data: wxMem[key], coords: coords, live: true };
+    try {
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?" + qs + "&timezone=auto&latitude=" + coords.lat + "&longitude=" + coords.lon);
+      const j = await r.json();
+      const d = j[field];
+      const ok = field === "current" ? !!d : !!(d && d.time && d.time.length);
+      if (ok) { wxMem[key] = d; wxSave(key, d); return { data: d, coords: coords, live: true }; }
+    } catch (e) {}
+    const cached = wxMem[key] || wxLoad(key);
+    if (cached) { wxMem[key] = cached; return { data: cached, coords: coords, live: false }; }
+    return null;
+  }
+
   async function loadScheduleWx(force) {
     const need = Array.from(document.querySelectorAll(".sched-wx[id]")).filter(s => !s.textContent.trim());
     if (!need.length) return;
-    const t = activeTrip(); const days = tripDays(t); if (!days.length) return;
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
-    if (!(lat && lon)) return;
-    const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
-    let daily = (packWxCache && packWxKey === key) ? packWxCache : ((schedWxCache && schedWxKey === key && !force) ? schedWxCache : null);
-    if (!daily) {
-      try {
-        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
-        const j = await r.json();
-        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; schedWxCache = daily; schedWxKey = key; }
-      } catch (e) {}
-    }
-    if (!daily || !daily.time) return;
+    const t = activeTrip(); if (!tripDays(t).length) return;
+    const c = await tripCoords(t); if (!c) return;
+    const res = await fetchWx("daily", DAILY_QS, "daily", c, force); if (!res) return;
+    const daily = res.data;
     const map = {}; daily.time.forEach((d, i) => { map[d] = { hi: daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null, code: daily.weather_code ? daily.weather_code[i] : null }; });
     need.forEach(span => {
       const w = map[span.id.replace("schedwx_","")];
@@ -2028,25 +2058,16 @@
     const manual = {}; (t.weather||[]).forEach(w => { if (w.high || w.low || w.condition) manual[w.date] = true; });
     const need = bodies.filter(b => !manual[b.id.replace("infowx_","")]); // don't overwrite hand-entered forecasts
     if (!need.length) return;
-    const days = tripDays(t); if (!days.length) return;
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
-    if (!(lat && lon)) return;
-    const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
-    let daily = (packWxCache && packWxKey === key) ? packWxCache : ((schedWxCache && schedWxKey === key && !force) ? schedWxCache : null);
-    if (!daily) {
-      try {
-        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
-        const j = await r.json();
-        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; packWxCache = daily; packWxKey = key; }
-      } catch (e) {}
-    }
-    if (!daily || !daily.time) return;
+    if (!tripDays(t).length) return;
+    const c = await tripCoords(t); if (!c) return;
+    const res = await fetchWx("daily", DAILY_QS, "daily", c, force); if (!res) return;
+    const daily = res.data;
     const map = {}; daily.time.forEach((d, i) => { map[d] = {
       hi: daily.temperature_2m_max ? daily.temperature_2m_max[i] : null,
       lo: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null,
       code: daily.weather_code ? daily.weather_code[i] : null,
       pp: daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null }; });
+    const liveNote = res.live ? '<div class="row-sub">● Live · tap for hourly</div>' : '<div class="row-sub">◔ Last saved · offline</div>';
     need.forEach(b => {
       const w = map[b.id.replace("infowx_","")];
       const card = b.closest(".wx");
@@ -2057,7 +2078,7 @@
       b.innerHTML = '<div class="temps" style="margin-top:6px"><span class="hi" style="font-size:2rem">'+Math.round(w.hi)+'°</span><span class="lo"> / '+Math.round(w.lo)+'°</span></div>' +
         '<div class="cond" style="font-weight:600">'+esc(info.label)+'</div>' +
         (w.pp != null ? '<div class="row-sub" style="margin-top:6px">Precip: '+w.pp+'%</div>' : "") +
-        '<div class="row-sub">● Live · tap for hourly</div>';
+        liveNote;
     });
     if (sunData) renderSunCard(); // weather codes just loaded — re-tint the arc to match
   }
@@ -2067,7 +2088,7 @@
     h = h % 12; if (h === 0) h = 12;
     return h + ":" + mi + " " + ap;
   }
-  let sunCache = null, sunKey = "", sunData = null, sunDays = [], sunSel = null;
+  let sunData = null, sunDays = [], sunSel = null;
   function sunMin(iso) { const m = /T(\d{2}):(\d{2})/.exec(iso || ""); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
   function sunDur(mins) { mins = Math.max(0, Math.round(mins)); const h = Math.floor(mins / 60), m = mins % 60; return (h ? h + "h " : "") + m + "m"; }
   function sunPillLabel(d) { return fmtDate(d, "dow").slice(0, 3) + " " + parseInt(d.slice(8), 10); }
@@ -2163,19 +2184,11 @@
     const body = document.getElementById("sunTimesBody"); if (!body) return;
     const t = activeTrip(); const days = tripDays(t);
     if (!days.length) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Add trip dates to see sun times.</p>'; return; }
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
-    if (!(lat && lon)) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Set a location to see sun times.</p>'; return; }
-    const key = lat.toFixed(3) + "," + lon.toFixed(3);
-    let daily = (sunCache && sunKey === key && !force) ? sunCache : null;
-    if (!daily) {
-      try {
-        const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=sunrise,sunset&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
-        const j = await r.json();
-        if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; sunCache = daily; sunKey = key; }
-      } catch (e) {}
-    }
-    if (!daily || !daily.time) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Sun times unavailable right now.</p>'; return; }
+    const c = await tripCoords(t);
+    if (!c) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Set a location to see sun times.</p>'; return; }
+    const res = await fetchWx("sun", "daily=sunrise,sunset&forecast_days=16", "daily", c, force);
+    if (!res) { body.innerHTML = '<p class="row-sub" style="margin:8px 0 0;color:var(--muted)">Sun times unavailable right now.</p>'; return; }
+    const daily = res.data;
     sunData = {}; daily.time.forEach((d, i) => { sunData[d] = { rise: daily.sunrise ? daily.sunrise[i] : null, set: daily.sunset ? daily.sunset[i] : null }; });
     sunDays = days;
     const tI = todayISO();
@@ -2814,7 +2827,7 @@
   const ACTIONS = {
     nav: (el) => { ui.section = el.dataset.section; render(); const c = document.getElementById("content"); if (c) c.scrollTop = 0; window.scrollTo(0,0); },
     "set-theme": (el) => { state.theme = el.dataset.theme === "dark" ? "dark" : "light"; saveLocal(); applyTheme(); render(); },
-    "switch-trip": (el) => { const id = el.value; const t = state.trips.find(x => x.id === id); if (t && t.lockHash && !isTripUnlocked(t)) { render(); promptTripPassword(t); return; } state.activeId = id; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); },
+    "switch-trip": (el) => { const id = el.value; const t = state.trips.find(x => x.id === id); if (t && t.lockHash && !isTripUnlocked(t)) { render(); promptTripPassword(t); return; } state.activeId = id; wxMem = {}; saveLocal(); ui.section = "overview"; render(); },
     "unlock-current": () => { const t = activeTrip(); if (t) promptTripPassword(t); },
     "new-trip": () => newTrip(),
     "edit-trip": () => editTrip(),
@@ -2954,20 +2967,10 @@
   }
 
   /* ---------- Full-day hourly forecast ---------- */
-  let hourlyWxCache = null, hourlyWxKey = "";
   async function loadHourlyWx(force) {
-    const t = activeTrip();
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
-    if (!(lat && lon)) return null;
-    const key = lat.toFixed(3) + "," + lon.toFixed(3);
-    if (hourlyWxCache && hourlyWxKey === key && !force) return hourlyWxCache;
-    try {
-      const r = await fetch("https://api.open-meteo.com/v1/forecast?hourly=temperature_2m,precipitation_probability,weather_code&timezone=auto&forecast_days=16&latitude=" + lat + "&longitude=" + lon);
-      const j = await r.json();
-      if (j.hourly && j.hourly.time && j.hourly.time.length) { hourlyWxCache = j.hourly; hourlyWxKey = key; return hourlyWxCache; }
-    } catch (e) {}
-    return null;
+    const c = await tripCoords(activeTrip()); if (!c) return null;
+    const res = await fetchWx("hourly", "hourly=temperature_2m,precipitation_probability,weather_code&forecast_days=16", "hourly", c, force);
+    return res ? res.data : null;
   }
   function hoursForDate(hourly, date) {
     const out = [];
@@ -3102,7 +3105,7 @@
   }
 
   /* ================= LIVE WEATHER ================= */
-  const geoCache = {}; let liveWxCache = null; let liveWxKey = "";
+  const geoCache = {};
   function wmoInfo(code) {
     const c = Number(code);
     const table = [
@@ -3249,45 +3252,23 @@
     const boxId = document.getElementById("liveWx") ? "liveWx" : (document.getElementById("ovWx") ? "ovWx" : null);
     if (!boxId) return;
     const setBox = (h) => { clearScene(boxId); const b = document.getElementById(boxId); if (b) b.innerHTML = h; };
-    const t = activeTrip();
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon), place = t.location;
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; if (!place) place = g.place; } }
-    if (!(lat && lon)) { setBox(liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Add a location (or latitude/longitude in trip details) to show live conditions here.</p>')); return; }
-    const key = lat.toFixed(3) + "," + lon.toFixed(3);
-    if (liveWxCache && liveWxKey === key && !force) { paintLive(boxId, liveWxCache, place); return; }
-    try {
-      const r = await fetch("https://api.open-meteo.com/v1/forecast?current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m&timezone=auto&latitude=" + lat + "&longitude=" + lon);
-      const j = await r.json();
-      if (!j.current) throw new Error("no data");
-      liveWxCache = j.current; liveWxKey = key;
-      paintLive(boxId, j.current, place);
-    } catch (e) {
-      setBox(liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Couldn\'t reach the weather service. <button class="btn sm" data-action="refresh-wx">Retry</button></p>'));
-    }
+    const c = await tripCoords(activeTrip());
+    if (!c) { setBox(liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Add a location (or latitude/longitude in trip details) to show live conditions here.</p>')); return; }
+    const res = await fetchWx("current", "current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m", "current", c, force);
+    if (!res) { setBox(liveWxShell('<p style="color:var(--muted);margin:8px 0 0">Couldn\'t reach the weather service. <button class="btn sm" data-action="refresh-wx">Retry</button></p>')); return; }
+    paintLive(boxId, res.data, c.place);
   }
 
   /* ===== Weather-aware packing nudge ===== */
-  let packWxCache = null, packWxKey = "";
   async function loadPackingWx(force) {
     const box = document.getElementById("packWxNudge");
     if (!box) return;
     const t = activeTrip();
     const days = tripDays(t);
     if (!days.length) { box.innerHTML = ""; return; }
-    let lat = parseFloat(t.lat), lon = parseFloat(t.lon);
-    if (!(lat && lon)) { const g = await geocode(t.location); if (g) { lat = g.lat; lon = g.lon; } }
+    const c = await tripCoords(t);
     let daily = null;
-    if (lat && lon) {
-      const key = lat.toFixed(3)+","+lon.toFixed(3)+"|"+days[0]+"|"+days[days.length-1];
-      if (packWxCache && packWxKey === key && !force) daily = packWxCache;
-      else {
-        try {
-          const r = await fetch("https://api.open-meteo.com/v1/forecast?daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=16&latitude="+lat+"&longitude="+lon);
-          const j = await r.json();
-          if (j.daily && j.daily.time && j.daily.time.length) { daily = j.daily; packWxCache = daily; packWxKey = key; }
-        } catch (e) {}
-      }
-    }
+    if (c) { const res = await fetchWx("daily", DAILY_QS, "daily", c, force); if (res) daily = res.data; }
     const nudges = packWxNudges(t, days, daily);
     box.innerHTML = nudges.length ? renderPackNudges(nudges) : "";
   }
@@ -3492,7 +3473,7 @@
   function promptTripPassword(t) {
     openForm({ title: "Enter trip password", submitLabel: "Unlock",
       fields: [{ key:"pw", label:"This trip is password-protected", type:"password", required:true }],
-      onSubmit: async v => { try { const h = await sha256hex(v.pw); if (h === t.lockHash) { unlockTrip(t.id); state.activeId = t.id; liveWxCache = null; saveLocal(); ui.section = "overview"; render(); toast("Unlocked"); } else { toast("Incorrect password"); promptTripPassword(t); } } catch (e) { toast("Something went wrong"); } }
+      onSubmit: async v => { try { const h = await sha256hex(v.pw); if (h === t.lockHash) { unlockTrip(t.id); state.activeId = t.id; wxMem = {}; saveLocal(); ui.section = "overview"; render(); toast("Unlocked"); } else { toast("Incorrect password"); promptTripPassword(t); } } catch (e) { toast("Something went wrong"); } }
     });
   }
   function openTripLockManager(t) {
@@ -3537,7 +3518,7 @@
     const fields = tripFields.concat([]);
     openForm({ title:"Trip details", fields: fields, values: t, onSubmit: v => {
       Object.assign(t, { name:v.name, location:v.location, site:v.site, parkPhone:v.parkPhone, startDate:v.startDate, endDate:v.endDate, checkin:v.checkin, checkout:v.checkout, lat:v.lat, lon:v.lon });
-      liveWxCache = null; save(); logActivity("updated the trip details"); render(); toast("Trip updated");
+      wxMem = {}; save(); logActivity("updated the trip details"); render(); toast("Trip updated");
     }, extraFooter: true });
     // add a delete-trip control into the modal footer
     if (state.trips.length > 1) {
