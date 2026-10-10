@@ -205,7 +205,7 @@
   .row-item { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border); }
   .row-item:last-child { border-bottom: none; }
   .row-main { flex: 1; min-width: 0; }
-  .row-title { font-weight: 500; }
+  .row-title { font-weight: 500; overflow-wrap: anywhere; }  /* long words break instead of spilling onto buttons */
   .row-sub { font-size: .82rem; color: var(--muted); margin-top: 1px; }
   .tag-cat { display: inline-block; font-size: .64rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--chip, rgba(0,0,0,.06)); border-radius: 6px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
   .store-input { width: 118px; max-width: 32vw; font: inherit; font-size: .8rem; color: var(--ink); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; outline: none; transition: border-color .12s; }
@@ -576,14 +576,17 @@
   }
   @media (max-width: 640px) {
     /* stack inline person/assign controls onto their own line so rows don't cram */
-    .row-item { flex-wrap: wrap; }
-    .row-item .row-main { flex: 1 1 60%; }
-    .row-item .store-input { order: 5; flex: 1 1 100%; max-width: none; margin: 4px 0 0 32px; }
-    .row-item .assign-wrap, .row-item .bringers { order: 6; flex: 1 1 100%; margin: 4px 0 0 32px; justify-content: flex-start; }
+    .row-item { flex-wrap: wrap; gap: 10px; }
+    /* Title shrinks to make room for the price/edit buttons on line 1 (no 60% reservation),
+       but keeps a small floor so on very tiny screens the buttons wrap instead of the title vanishing. */
+    .row-item .row-main { flex: 1 1 3.5rem; min-width: 0; }
+    /* stacked controls indent = checkbox's default margins (4px + 3px) + its 20px + row gap (10px) = 37px,
+       so the store field / assignees line up exactly under the title */
+    .row-item .store-input { order: 5; flex: 1 1 100%; max-width: none; margin: 4px 0 0 37px; }
+    .row-item .assign-wrap, .row-item .bringers { order: 6; flex: 1 1 100%; margin: 4px 0 0 37px; justify-content: flex-start; }
     .row-item .assign-wrap .inline-select, .bringers .bringer-add { flex: 1 1 auto; max-width: none; }
     /* meal row: pill + name + edit together on line 1, Ingredients button on line 2 */
     .meal-item { align-items: center; padding-top: 10px; padding-bottom: 10px; }
-    .meal-item .row-main { flex: 1 1 0; min-width: 0; }
     .meal-item .ming-toggle { order: 6; flex: 1 1 100%; margin-top: 8px; justify-content: center; }
   }
   @media (max-width: 520px) {
@@ -679,10 +682,12 @@
     .trip-switch, .sidebar-foot { display: none; }
     .sidebar { border-bottom: none; }
   }
-  /* Desktop: keep a row's title/status column from being starved to one word wide when the
-     right-hand widget (bringers / assign) has a lot of content. Floor the main column and let
-     the right widget shrink and wrap its chips instead. */
-  @media (min-width: 861px) {
+  /* Tablet & desktop (anything wider than the 640px phone layout, incl. unfolded foldables):
+     keep a row's title/status column from being starved to one word wide when the right-hand
+     widget (bringers / assign) has a lot of content. Floor the main column and let the right
+     widget shrink and wrap its chips instead. 640.02px (not 641) so fractional widths from
+     zoom / odd pixel ratios can't fall in a gap between this and the max-width:640px block. */
+  @media (min-width: 640.02px) {
     .row-item .row-main { min-width: 200px; }
     .row-item .bringers, .row-item .assign-wrap { flex: 0 1 auto; min-width: 0; max-width: 58%; }
   }
@@ -704,11 +709,15 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 19;
+  const APP_VERSION = 20;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 20, date: "2026-10-10", title: "Shopping list spacing on phones", notes: [
+      "Fixed shopping rows on narrower phones where the price / “+ add price” button got bumped onto its own line — it now stays next to the item.",
+      "Very long item names now wrap neatly instead of running into the buttons.",
+      "Lists also lay out better on tablets and other mid-size screens." ] },
     { v: 19, date: "2026-09-22", title: "Weather offline + packing layout fix", notes: [
       "The last forecast is now saved on your device, so weather still shows something when you're offline (e.g. at the campsite with no signal).",
       "Fixed a desktop bug where packing items with several people assigned got squished into one word per line." ] },
