@@ -709,11 +709,17 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 22;
+  const APP_VERSION = 23;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 23, date: "2026-10-13", title: "No more duplicate names", notes: [
+      "When you pick who you are, typing just your first name now links you to your existing profile instead of starting a new one.",
+      "Adding someone whose first name is already on the trip asks “Is this the same person?” — say yes and they stay one profile (with their full name).",
+      "Adding a new person suggests full names from your other trips, so everyone's spelled the same everywhere.",
+      "You can't rename someone to a name another person already has."
+    ] },
     { v: 22, date: "2026-10-13", title: "One person, one name", notes: [
       "First names and full names are now treated as the same person everywhere — “Eric” and “Eric Cheung” are one profile.",
       "The Activity tracker combines everyone's edits under one name instead of splitting them.",
@@ -1372,17 +1378,19 @@
     document.addEventListener("keydown", onKey);
     document.body.appendChild(box);
   }
-  function confirmDialog(title, msg, onYes, yesLabel, yesTone) {
+  function confirmDialog(title, msg, onYes, yesLabel, yesTone, alt) {
     const overlay = document.getElementById("overlay");
     overlay.innerHTML =
       '<div class="modal" role="dialog" aria-modal="true" style="max-width:400px">' +
         '<div class="modal-head"><h3>'+esc(title)+'</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
         '<div class="modal-body"><p style="margin:0;color:var(--muted)">'+esc(msg)+'</p></div>' +
         '<div class="modal-foot"><button class="btn ghost" data-close>Cancel</button>' +
+        (alt ? '<button class="btn" id="confirmAlt">'+esc(alt.label)+'</button>' : '') +
         '<button class="btn '+(yesTone||"danger")+'" id="confirmYes">'+esc(yesLabel||"Delete")+'</button></div>' +
       '</div>';
     overlay.classList.add("open");
     document.getElementById("confirmYes").addEventListener("click", () => { closeModal(); onYes(); });
+    if (alt) document.getElementById("confirmAlt").addEventListener("click", () => { closeModal(); alt.fn(); });
   }
 
   /* ---------- Patch notes / What's New (UI + localStorage only) ---------- */
@@ -3067,9 +3075,23 @@
     "add-pack-choose": () => openAddPackingChooser(),
 
     // guests / people
-    "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"text",required:true,placeholder:"First name"},{key:"photo",label:"Photo (optional)",type:"photo",initials:"?",hint:"Auto-shrunk to a small avatar and shown across the app."}], onSubmit: v => { const t = activeTrip(); const pid = uid(); t.people.push({id:pid, name:v.name, photo:v.photo||""}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+v.name+" to the crew"); render(); toast(v.name+" added"); } }); },
+    "add-person": () => { openForm({ title:"Add person", fields:[{key:"name",label:"Name",type:"datalist",required:true,placeholder:"First and last name",options:knownNamesElsewhere,hint:"Use the same spelling as on your other trips so it's one profile."},{key:"photo",label:"Photo (optional)",type:"photo",initials:"?",hint:"Auto-shrunk to a small avatar and shown across the app."}], onSubmit: v => { const t = activeTrip(); const nm = cleanName(v.name); if (!nm) return;
+      const add = () => { const pid = uid(); t.people.push({id:pid, name:nm, photo:v.photo||""}); t.guests.push({id:uid(), personId:pid, rsvp:"Yes", departure:"", carpool:"", driver:false}); save(); logActivity("added "+nm+" to the crew"); render(); toast(nm+" added"); };
+      const same = (t.people||[]).find(p => normName(p.name) === normName(nm));
+      if (same) { toast(same.name+" is already on this trip"); return; }
+      const clash = sameFirstName(t, nm);
+      if (!clash) { add(); return; }
+      // "Eric" vs "Eric Cheung": most likely the same person — keep ONE profile (with the fuller name) so lists, jobs & activity stay together
+      const fuller = longerName(clash.name, nm);
+      confirmDialog("Is this "+clash.name+"?", clash.name+" is already on this trip. If it's the same person, we'll keep one profile"+(fuller !== clash.name ? " and call it “"+fuller+"”" : "")+" so their lists, jobs and activity stay together.",
+        () => { const old = clash.name, renamed = fuller !== old, photo = v.photo && !clash.photo;
+          if (renamed) clash.name = fuller; if (photo) clash.photo = v.photo;
+          if (renamed || photo) { save(); if (renamed) logActivity("renamed "+old+" to "+fuller); render(); }
+          toast("Kept one profile: "+fuller); },
+        "Same person", "primary", { label: "Different person", fn: add });
+    } }); },
     "edit-guest": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); let g = t.guests.find(x=>x.personId===pid); if(!g){ g = {id:uid(), personId:pid, rsvp:"", departure:"", carpool:"", driver:false, seats:"", meetPoint:""}; t.guests.push(g); }
-      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true},{key:"photo",label:"Photo",type:"photo",initials:initials(person.name),hint:"Auto-shrunk to a small avatar and shown across the app."}].concat(guestFields()), values:Object.assign({name:person.name, photo:person.photo||""}, g), onSubmit: v => { person.name = v.name; person.photo = v.photo||""; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; g.seats=v.seats; g.meetPoint=v.meetPoint; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
+      openForm({ title:"Edit "+person.name, fields:[{key:"name",label:"Name",type:"text",required:true},{key:"photo",label:"Photo",type:"photo",initials:initials(person.name),hint:"Auto-shrunk to a small avatar and shown across the app."}].concat(guestFields()), values:Object.assign({name:person.name, photo:person.photo||""}, g), onSubmit: v => { const nm = cleanName(v.name) || person.name; const dup = t.people.find(p => p.id !== pid && normName(p.name) === normName(nm)); if (dup) toast(dup.name+" is already on this trip — name not changed"); else person.name = nm; person.photo = v.photo||""; g.departure=v.departure; g.carpool=v.carpool; g.driver=v.driver; g.seats=v.seats; g.meetPoint=v.meetPoint; save(); logActivity("updated "+person.name+"’s details"); render(); toast("Saved"); }, onDelete: () => ACTIONS["del-person"]({dataset:{id:pid}}) }); },
     "del-person": (el) => { const t = activeTrip(); const pid = el.dataset.id; const person = findById(t.people, pid); confirmDialog("Remove "+person.name+"?", "This removes them from the crew and unassigns them from roles, meals and packing.", () => {
         t.people = t.people.filter(p=>p.id!==pid); t.guests = t.guests.filter(g=>g.personId!==pid);
         t.roles.forEach(r=>{ if(r.personId===pid) r.personId=""; }); t.meals.forEach(m=>{ if(m.personId===pid) m.personId=""; }); t.packing.forEach(p=>{ if(p.personId===pid) p.personId=""; });
@@ -3487,6 +3509,17 @@
   // display-only — stored names are never rewritten.
   function canonName(trip, name) { const p = personForName(trip, name); return p ? p.name : (String(name || "").trim()); }
   function myName(trip) { return canonName(trip, whoAmI()); }
+  function cleanName(s) { return String(s || "").trim().replace(/\s+/g, " "); }
+  function firstOf(s) { return normName(s).split(" ")[0]; }
+  function sameFirstName(trip, name) { const f = firstOf(name); return ((trip && trip.people) || []).find(p => firstOf(p.name) === f) || null; }
+  function longerName(a, b) { return firstOf(a) === firstOf(b) && cleanName(b).length > cleanName(a).length ? cleanName(b) : a; }
+  // Full names used on the user's other trips, so a new trip reuses the same spelling.
+  function knownNamesElsewhere(trip) {
+    const here = new Set(((trip && trip.people) || []).map(p => firstOf(p.name)));
+    const best = {};
+    state.trips.forEach(t => (t.people || []).forEach(p => { const f = firstOf(p.name); if (!f || here.has(f)) return; best[f] = best[f] ? longerName(best[f], p.name) : cleanName(p.name); }));
+    return Object.values(best).sort();
+  }
   // Carpool groups are free text ("Joyce Rav4", "Eric's Van") — only a bare first name is treated as a person.
   function carpoolName(trip, g) { const v = String(g || "").trim(); return /\s/.test(v) ? v : canonName(trip, v); }
   function normName(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
@@ -3526,7 +3559,9 @@
     const inp = overlay.querySelector("#idOther");
     if (inp) inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); ACTIONS["pick-who-other"](); } });
   }
-  function applyIdentity(n) { if (!n) { toast("Type your name first"); return; } const first = !whoAmI(); setWho(n); closeModal(); render(); if (first) logActivity("joined the trip"); toast("Hi " + n + "!"); }
+  function applyIdentity(n) { if (!n) { toast("Type your name first"); return; }
+    const known = personForName(activeTrip(), n); if (known) n = known.name; // "eric" → "Eric Cheung": one profile, not a new spelling
+    const first = !whoAmI(); setWho(n); closeModal(); render(); if (first) logActivity("joined the trip"); toast("Hi " + n + "!"); }
 
   /* ================= ACTIVITY LOG ================= */
   function logActivity(text) {

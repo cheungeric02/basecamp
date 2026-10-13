@@ -1,5 +1,5 @@
 /* Basecamp service worker — offline app shell so the trip loads with no signal. */
-const CACHE = "basecamp-v22";
+const CACHE = "basecamp-v23";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
