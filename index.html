@@ -709,11 +709,16 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 20;
+  const APP_VERSION = 21;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 21, date: "2026-10-13", title: "Personal lists & offline saving", notes: [
+      "Your personal packing list now follows you, whichever way your name is spelled or which device you use.",
+      "Lists saved under two spellings of your name are combined into one — nothing is dropped.",
+      "Edits made with no signal are kept and merged when you reconnect, instead of being overwritten."
+    ] },
     { v: 20, date: "2026-10-10", title: "Shopping list spacing on phones", notes: [
       "Fixed shopping rows on narrower phones where the price / “+ add price” button got bumped onto its own line — it now stays next to the item.",
       "Very long item names now wrap neatly instead of running into the buttons.",
@@ -928,8 +933,106 @@
   const expandedMeals = {};
 
   function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { console.warn("save failed", e); } }
-  function syncActive() { const t = activeTrip(); if (t && window.BCsync && window.BCsync.ready) window.BCsync.writeTrip(t.id, t); }
-  function save() { saveLocal(); syncActive(); }
+  function syncActive() { const t = activeTrip(); if (t) flushTrip(t.id); }
+  function save() { saveLocal(); const t = activeTrip(); if (t) markPending(t.id); syncActive(); }
+
+  /* ---------- Safe sync: edits are never overwritten ----------
+     Every save marks the trip "pending" on this device (kept in localStorage, so it survives the
+     app being closed with no signal). The upload is a server-side MERGE, not an overwrite: a 3-way
+     merge of base (the server copy our edits started from), local (our copy) and remote (what's on
+     the server now). So an offline edit, or two people editing at once, can't wipe each other out.
+     The pending flag is only cleared once the server confirms it has our changes. */
+  const PENDING_KEY = "basecamp.pending";   // { tripId: base JSON ("" if unknown / didn't fit) }
+  let pending = (function () { try { return JSON.parse(localStorage.getItem(PENDING_KEY)) || {}; } catch (e) { return {}; } })();
+  const lastServer = {};   // tripId -> JSON of the trip as last seen from the server
+  const editSeq = {};      // tripId -> local edit counter (detects edits made while an upload is in flight)
+  const flushState = {};   // tripId -> "busy" | "again"
+  function savePending() {
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); }
+    catch (e) {
+      // storage full: keep the pending flags without base copies (merge then keeps both sides' items)
+      Object.keys(pending).forEach(k => { pending[k] = ""; });
+      try { localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch (e2) {}
+    }
+  }
+  const SEED_KEY = "basecamp.seedTrip";
+  function isPlaceholder(id) { try { return localStorage.getItem(SEED_KEY) === id; } catch (e) { return false; } }
+  function markPending(id) {
+    if (isPlaceholder(id)) return;
+    editSeq[id] = (editSeq[id] || 0) + 1;
+    if (!(id in pending)) { pending[id] = lastServer[id] || ""; savePending(); }
+  }
+  function parseOr(s) { if (!s) return undefined; try { return JSON.parse(s); } catch (e) { return undefined; } }
+  function flushPending() { Object.keys(pending).forEach(flushTrip); }
+  function flushTrip(id) {
+    const S = window.BCsync;
+    if (!(S && S.ready && S.mergeTrip) || !(id in pending)) return;
+    if (flushState[id]) { flushState[id] = "again"; return; }
+    flushState[id] = "busy";
+    let sentSeq = -1;
+    S.mergeTrip(id, cur => {
+      const t = state.trips.find(x => x.id === id);
+      if (!t || !(id in pending)) return;   // trip gone / nothing to send → abort
+      sentSeq = editSeq[id] || 0;
+      const local = JSON.parse(JSON.stringify(t));
+      const remote = parseOr(cur);
+      return JSON.stringify(remote ? merge3(parseOr(pending[id]), local, remote) : local);
+    }).then(res => {
+      const again = flushState[id] === "again"; flushState[id] = null;
+      if (res && res.committed && res.value) {
+        if (id in pending) {
+          if ((editSeq[id] || 0) === sentSeq) delete pending[id];   // server has everything we had
+          else pending[id] = res.value;                             // more edits since → re-base on what we sent
+          savePending();
+        }
+        applyServerTrip(res.value);   // pull in anyone else's changes the merge brought along
+      }
+      if (again) flushTrip(id);
+    }).catch(e => { flushState[id] = null; console.warn("[Basecamp] sync write failed — will retry", e); });
+  }
+
+  // ----- 3-way merge (base = common ancestor, l = ours, r = theirs). Never drops data:
+  // one side deleting while the other edits keeps the edit; true conflicts go to ours.
+  function deepEq(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (!deepEq(a[i], b[i])) return false; return true; }
+    const ka = Object.keys(a).filter(k => a[k] !== undefined), kb = Object.keys(b).filter(k => b[k] !== undefined);
+    if (ka.length !== kb.length) return false;
+    return ka.every(k => deepEq(a[k], b[k]));
+  }
+  const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
+  const isIdArr = v => Array.isArray(v) && v.every(x => isObj(x) && x.id != null);
+  const isPrimArr = v => Array.isArray(v) && v.every(x => x === null || typeof x !== "object");
+  function merge3(b, l, r) {
+    if (deepEq(l, r)) return l;
+    if (deepEq(l, b)) return r;          // only they changed it
+    if (deepEq(r, b)) return l;          // only we changed it
+    if (l === undefined) return r;       // we deleted, they edited → keep their edit
+    if (r === undefined) return l;       // they deleted, we edited → keep ours
+    if (isIdArr(l) && isIdArr(r) && (b === undefined || isIdArr(b))) return mergeIdArr(b || [], l, r, b === undefined);
+    if (isPrimArr(l) && isPrimArr(r) && (b === undefined || isPrimArr(b))) {
+      const base = b || [];
+      const out = r.filter(x => !(base.includes(x) && !l.includes(x)));   // theirs minus what we removed
+      l.forEach(x => { if (!base.includes(x) && !out.includes(x)) out.push(x); });   // plus what we added
+      return out;
+    }
+    if (isObj(l) && isObj(r)) {
+      const bo = isObj(b) ? b : {}, out = {};
+      new Set(Object.keys(r).concat(Object.keys(l))).forEach(k => { const v = merge3(isObj(b) ? bo[k] : undefined, l[k], r[k]); if (v !== undefined) out[k] = v; });
+      return out;
+    }
+    return l;   // scalar conflict → ours
+  }
+  function mergeIdArr(b, l, r, noBase) {
+    const bm = {}, lm = {}, rm = {};
+    b.forEach(x => { bm[x.id] = x; }); l.forEach(x => { lm[x.id] = x; }); r.forEach(x => { rm[x.id] = x; });
+    const out = [], seen = {};
+    const take = id => { if (seen[id]) return; seen[id] = 1; const v = noBase ? merge3(undefined, lm[id], rm[id]) : merge3(bm[id], lm[id], rm[id]); if (v !== undefined) out.push(v); };
+    r.forEach(x => take(x.id)); l.forEach(x => take(x.id));   // their order, then our new items
+    return out;
+  }
   function load() {
     try { const raw = localStorage.getItem(LS_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
     return null;
@@ -1061,13 +1164,18 @@
     if (!state || !state.trips || !state.trips.length) {
       const t = seedBonEcho();
       state = { trips: [t], activeId: t.id, theme: "auto" };
-      save();
+      // a placeholder until the shared trips arrive — never queue it as an unsent edit
+      try { localStorage.setItem(SEED_KEY, t.id); } catch (e) {}
+      saveLocal();
     }
     // migrate: ensure fields exist
     state.trips.forEach(t => {
       ["weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","people","todos"].forEach(k => { if (!Array.isArray(t[k])) t[k] = []; });
       if (typeof t.notes !== "string") t.notes = "";
       ensureReceipts(t);
+      // with no unsent edits, our saved copy is what the server last gave us — the merge base for the next edit
+      if (!(t.id in pending)) lastServer[t.id] = JSON.stringify(t);
+      mergePersonalLists(t);
     });
     if (state.theme !== "light" && state.theme !== "dark") { state.theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; }
     applyTheme();
@@ -1534,7 +1642,7 @@
     else { countVal = "✓"; countTitle = "Trip complete"; countSub = "Hope it was a good one"; pillClass="muted"; }
 
     const who = whoAmI();
-    const myPackList = (who && trip.personalPacking && Array.isArray(trip.personalPacking[who])) ? trip.personalPacking[who] : [];
+    const myPackList = (who && myPersonalList(trip)) || [];
     const groupPackTotal = trip.packing.length;
     const groupPackDone = trip.packing.filter(itemComplete).length;
     const persPackTotal = myPackList.length;
@@ -2318,11 +2426,47 @@
 
   /* ---------- Packing ---------- */
   const PERSONAL_CATS = ["Clothing","Toiletries","Health & Meds","Electronics","Documents","Other"];
+  // Personal lists belong to a PERSON (trip.personalLists[personId]), not to whatever name a device
+  // typed — so "Fei", "Fei Choi" and a second phone all open the same list. Older name-keyed lists in
+  // trip.personalPacking are left untouched as a backup and folded in once (see mergePersonalLists).
   function myPersonalList(trip) {
     const who = whoAmI(); if (!who) return null;
     if (!trip.personalPacking || typeof trip.personalPacking !== "object" || Array.isArray(trip.personalPacking)) trip.personalPacking = {};
+    const p = personForName(trip, who);
+    if (p) {
+      mergePersonalLists(trip);
+      if (!Array.isArray(trip.personalLists[p.id])) trip.personalLists[p.id] = [];
+      return trip.personalLists[p.id];
+    }
+    // name isn't one of this trip's people → fall back to a list under the typed name
     if (!Array.isArray(trip.personalPacking[who])) trip.personalPacking[who] = [];
     return trip.personalPacking[who];
+  }
+  // Fold every name-keyed list that belongs to a person into that person's list. Each source item is
+  // folded in only once (ids recorded in personalMerged), so deleting it later doesn't bring it back.
+  // Same item on two lists (same name) → kept once, packed if it was ticked on either.
+  function mergePersonalLists(t) {
+    if (!isObj(t.personalLists)) t.personalLists = {};
+    if (!isObj(t.personalMerged)) t.personalMerged = {};
+    if (!isObj(t.personalPacking)) return;
+    Object.keys(t.personalPacking).sort().forEach(key => {
+      const src = t.personalPacking[key];
+      if (!Array.isArray(src) || !src.length) return;
+      const p = personForName(t, key); if (!p) return;
+      const list = Array.isArray(t.personalLists[p.id]) ? t.personalLists[p.id] : (t.personalLists[p.id] = []);
+      const done = Array.isArray(t.personalMerged[p.id]) ? t.personalMerged[p.id] : (t.personalMerged[p.id] = []);
+      // identical items from a *different* spelling's list merge; duplicates within one list are left alone
+      const fromHere = new Set(src.map(it => it && it.id));
+      src.forEach(it => {
+        if (!it || it.id == null || done.includes(it.id)) return;
+        done.push(it.id);
+        if (list.some(x => x.id === it.id)) return;
+        const nm = normName(it.item);
+        const same = nm && list.find(x => !fromHere.has(x.id) && normName(x.item) === nm);
+        if (same) { if (it.packed) same.packed = true; return; }
+        list.push(Object.assign({}, it));
+      });
+    });
   }
   function personalStarter() {
     const mk = (item, category) => ({ id: uid(), item: item, category: category, packed: false });
@@ -2912,7 +3056,7 @@
     // personal packing (per logged-in person)
     "add-mypack": () => { const t = activeTrip(); if (!whoAmI()) { ensureIdentity(true); return; } openForm({ title:"Add to your personal list", fields:[{key:"item",label:"Item",type:"text",required:true,placeholder:"e.g. Toothbrush"},{key:"category",label:"Category",type:"select",options:PERSONAL_CATS}], values:{category:"Clothing"}, onSubmit: v => { myPersonalList(t).push({id:uid(), item:v.item, category:v.category, packed:false}); save(); logActivity("added personal item “"+v.item+"”"); render(); toast("Added to your list"); } }); },
     "edit-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (!p) return; openForm({ title:"Edit personal item", fields:[{key:"item",label:"Item",type:"text",required:true},{key:"category",label:"Category",type:"select",options:PERSONAL_CATS}], values:p, onSubmit: v => { p.item=v.item; p.category=v.category; save(); render(); }, onDelete: () => ACTIONS["del-mypack"]({dataset:{id:p.id}}) }); },
-    "del-mypack": (el) => { const t = activeTrip(); const who = whoAmI(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); confirmDialog("Remove item", "Remove “"+(p?p.item:"item")+"” from your personal list?", () => { t.personalPacking[who] = list.filter(x=>x.id!==el.dataset.id); save(); render(); toast("Removed"); }); },
+    "del-mypack": (el) => { const t = activeTrip(); const who = whoAmI(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); confirmDialog("Remove item", "Remove “"+(p?p.item:"item")+"” from your personal list?", () => { const cur = myPersonalList(t) || []; const i = cur.findIndex(x=>x.id===el.dataset.id); if (i >= 0) cur.splice(i, 1); save(); render(); toast("Removed"); }); },
     "toggle-mypack": (el) => { const t = activeTrip(); const list = myPersonalList(t); if (!list) return; const p = list.find(x=>x.id===el.dataset.id); if (p) { p.packed = el.checked; save(); render(); } },
     "seed-mypack": () => { const t = activeTrip(); if (!whoAmI()) { ensureIdentity(true); return; } const list = myPersonalList(t); personalStarter().forEach(it => list.push(it)); save(); logActivity("started a personal packing list"); render(); toast("Starter list added"); },
     "add-pack-choose": () => openAddPackingChooser(),
@@ -3333,7 +3477,19 @@
   /* ================= IDENTITY (who is editing) ================= */
   function whoAmI() { try { return localStorage.getItem("bc.who") || ""; } catch (e) { return ""; } }
   function setWho(n) { try { localStorage.setItem("bc.who", n); } catch (e) {} }
-  function myPersonId(trip) { const who = whoAmI(); if (!who) return ""; const p = (trip.people || []).find(x => x.name === who); return p ? p.id : ""; }
+  function myPersonId(trip) { const p = personForName(trip, whoAmI()); return p ? p.id : ""; }
+  function normName(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  // Match a typed name to one of the trip's people: exact name first, then a unique first-name
+  // match ("Fei" ↔ "Fei Choi"), so the same person is recognised whichever spelling a device uses.
+  function personForName(trip, name) {
+    const n = normName(name); if (!n) return null;
+    const people = (trip && trip.people) || [];
+    const exact = people.filter(p => normName(p.name) === n);
+    if (exact.length) return exact.length === 1 ? exact[0] : null;
+    const first = n.split(" ")[0];
+    const byFirst = people.filter(p => normName(p.name).split(" ")[0] === first);
+    return byFirst.length === 1 ? byFirst[0] : null;
+  }
   let identityPrompted = false;
   function ensureIdentity(force) {
     if (!force && whoAmI()) return;
@@ -3533,7 +3689,7 @@
     if (state.trips.length > 1) {
       const foot = document.querySelector("#overlay .modal-foot");
       if (foot) { const b = document.createElement("button"); b.type="button"; b.className="btn danger"; b.style.marginRight="auto";
-        b.textContent = "Delete trip"; b.addEventListener("click", () => { closeModal(); confirmDialog("Delete "+t.name+"?", "This permanently removes the trip and all its data for everyone.", () => { const delId = t.id; logActivity("deleted trip “"+t.name+"”"); state.trips = state.trips.filter(x=>x.id!==delId); state.activeId = state.trips[0].id; ui.section="overview"; saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.removeTrip(delId); render(); toast("Trip deleted"); }); });
+        b.textContent = "Delete trip"; b.addEventListener("click", () => { closeModal(); confirmDialog("Delete "+t.name+"?", "This permanently removes the trip and all its data for everyone.", () => { const delId = t.id; logActivity("deleted trip “"+t.name+"”"); state.trips = state.trips.filter(x=>x.id!==delId); state.activeId = state.trips[0].id; ui.section="overview"; delete pending[delId]; savePending(); saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.removeTrip(delId); render(); toast("Trip deleted"); }); });
         foot.insertBefore(b, foot.firstChild); }
     }
     // add a lock / password control into the modal footer
@@ -3579,7 +3735,7 @@
             if (state.theme !== "light" && state.theme !== "dark") state.theme = "light";
             if (!state.activeId || !state.trips.find(t=>t.id===state.activeId)) state.activeId = state.trips[0].id;
             state.trips.forEach(t => ensureShape(t));
-            ui.section = "overview"; applyTheme(); saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.writeAll(state.trips); render();
+            ui.section = "overview"; applyTheme(); pending = {}; savePending(); saveLocal(); if (window.BCsync && window.BCsync.ready) window.BCsync.writeAll(state.trips); render();
             toast("Backup restored (" + data.trips.length + " trip" + (data.trips.length===1?"":"s") + ")");
           } catch (e) { toast("Couldn't read that file — is it a Basecamp backup?"); }
         };
@@ -3626,6 +3782,7 @@
     (t.shopping || []).forEach(s => { if (!Array.isArray(s.assignedIds)) s.assignedIds = []; if (typeof s.store !== "string") s.store = ""; if (s.category === "Food & Drink") s.category = foodOrDrink(s.item); });
     (t.schedule || []).forEach(s => { if (!s.type) s.type = schedTypeGuess(s.activity); });
     ensureReceipts(t);
+    mergePersonalLists(t);
   }
   // Receipts are first-class objects that many purchases can point at via receiptId.
   // Older expenses stored the photo inline on e.receipt — fold those into a receipt object.
@@ -3674,26 +3831,50 @@
     getLocalTrips() { return state.trips; },
     refresh() { render(); },
     syncError() { toast("Sync issue — check the database rules in Firebase"); },
+    flushPending,
     applyRemote(remoteTrips) {
       if (!Array.isArray(remoteTrips) || !remoteTrips.length) return;
       const byId = {};
-      remoteTrips.forEach(t => { ensureShape(t); byId[t.id] = t; });
-      // update existing trips in place (preserves object refs held by open editors), add new ones.
-      // Nested item arrays are merged by id so refs an open editor holds (e.g. a shopping item
-      // being priced) stay live — otherwise the editor would write to a detached, replaced object.
-      const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","todos","receipts"];
-      remoteTrips.forEach(rt => {
-        const lt = state.trips.find(t => t.id === rt.id);
-        if (lt) { NESTED.forEach(k => { if (Array.isArray(rt[k])) rt[k] = mergeById(lt[k], rt[k]); }); Object.assign(lt, rt); }
-        else state.trips.push(rt);
-      });
-      // drop any local trips that no longer exist remotely (remote is the source of truth)
-      state.trips = state.trips.filter(t => byId[t.id]);
+      remoteTrips.forEach(rt => { byId[rt.id] = true; mergeIntoLocal(rt); });
+      // drop local trips that no longer exist remotely (remote is the source of truth) —
+      // except ones with unsent edits (e.g. a trip created offline), which still need uploading
+      state.trips = state.trips.filter(t => byId[t.id] || (t.id in pending));
       if (!state.trips.find(t => t.id === state.activeId)) state.activeId = (state.trips[0] || {}).id;
       saveLocal();
       if (!isEditing()) render();
+      flushPending();   // anything still unsent goes up now that we're connected
     }
   };
+  // Bring one server copy of a trip into local state. If this device has unsent edits for it,
+  // 3-way merge instead of overwriting, so those edits survive.
+  function mergeIntoLocal(rt) {
+    const raw = JSON.stringify(rt);
+    if (isPlaceholder(rt.id)) { try { localStorage.removeItem(SEED_KEY); } catch (e) {} } // it's a real shared trip now
+    const lt = state.trips.find(t => t.id === rt.id);
+    if (lt && (rt.id in pending)) {
+      rt = merge3(parseOr(pending[rt.id]), JSON.parse(JSON.stringify(lt)), rt);
+      pending[rt.id] = raw; savePending();   // our edits now sit on top of this server copy
+    }
+    lastServer[rt.id] = raw;
+    ensureShape(rt);
+    // update existing trips in place (preserves object refs held by open editors), add new ones.
+    // Nested item arrays are merged by id so refs an open editor holds (e.g. a shopping item
+    // being priced) stay live — otherwise the editor would write to a detached, replaced object.
+    const NESTED = ["people","weather","meals","shopping","roles","schedule","packing","guests","budget","settlements","checklist","todos","receipts"];
+    if (lt) {
+      NESTED.forEach(k => { if (Array.isArray(rt[k])) rt[k] = mergeById(lt[k], rt[k]); });
+      ["personalLists","personalPacking"].forEach(k => {
+        if (!isObj(rt[k]) || !isObj(lt[k])) return;
+        Object.keys(rt[k]).forEach(key => { if (Array.isArray(rt[k][key])) rt[k][key] = mergeById(lt[k][key], rt[k][key]); });
+      });
+      Object.assign(lt, rt);
+    } else state.trips.push(rt);
+  }
+  function applyServerTrip(json) {
+    const rt = parseOr(json); if (!rt || !rt.id) return;
+    mergeIntoLocal(rt); saveLocal();
+    if (!isEditing()) render();
+  }
 
   init();
 })();
@@ -3706,7 +3887,7 @@
 ============================================================ -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getDatabase, ref, onValue, set, remove, push, query, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+  import { getDatabase, ref, onValue, set, remove, push, query, limitToLast, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
   /* ⬇⬇⬇  PASTE YOUR FIREBASE CONFIG BETWEEN THE BRACES  ⬇⬇⬇ */
   const firebaseConfig = {
@@ -3731,6 +3912,12 @@
       window.BCsync = {
         ready: true,
         writeTrip(id, trip) { set(ref(db, "trips/" + id), JSON.stringify(trip)).catch(e => console.warn("write failed", e)); },
+        // Merge-write: fn(currentServerJSON) returns the JSON to store; Firebase re-runs it if the
+        // trip changed underneath us, so nobody's edits are overwritten. Resolves {committed, value}.
+        mergeTrip(id, fn) {
+          return runTransaction(ref(db, "trips/" + id), fn, { applyLocally: false })
+            .then(r => ({ committed: r.committed, value: r.snapshot.val() }));
+        },
         writeAll(trips) { const o = {}; trips.forEach(t => { o[t.id] = JSON.stringify(t); }); set(tripsRef, o).catch(e => console.warn("writeAll failed", e)); },
         removeTrip(id) { remove(ref(db, "trips/" + id)).catch(e => console.warn("remove failed", e)); },
         logActivity(entry) { try { push(ref(db, "activity"), entry); } catch (e) { console.warn("log failed", e); } },
@@ -3741,6 +3928,8 @@
         removeActivityKeys(keys) { try { (keys || []).forEach(k => remove(ref(db, "activity/" + k))); } catch (e) { console.warn("removeKeys failed", e); } }
       };
       if (window.__bcApp) window.__bcApp.refresh(); // reflect "Live sync on"
+      // Whenever we (re)connect, upload any edits made while offline or before the app was closed.
+      onValue(ref(db, ".info/connected"), s => { if (s.val() === true && window.__bcApp && window.__bcApp.flushPending) window.__bcApp.flushPending(); });
       let seeded = false;
       onValue(tripsRef, snap => {
         const val = snap.val();
