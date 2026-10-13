@@ -709,11 +709,16 @@
 
   const LS_KEY = "basecamp.v1";
   // Build/cache marker. MUST match the sw.js cache number ("basecamp-v<N>"); bump both together.
-  const APP_VERSION = 21;
+  const APP_VERSION = 22;
   // Namespaced so it doesn't collide with other apps sharing this github.io origin's localStorage.
   const SEEN_VER_KEY = "basecamp_lastSeenVer";
   // Update history, newest-first. Each: { v, date:"YYYY-MM-DD", title, notes:[...] }.
   const PATCH_NOTES = [
+    { v: 22, date: "2026-10-13", title: "One person, one name", notes: [
+      "First names and full names are now treated as the same person everywhere — “Eric” and “Eric Cheung” are one profile.",
+      "The Activity tracker combines everyone's edits under one name instead of splitting them.",
+      "Photos, carpool groups and the “Who are you?” picker recognise you whichever way your name was typed. Nothing is deleted."
+    ] },
     { v: 21, date: "2026-10-13", title: "Personal lists & offline saving", notes: [
       "Your personal packing list now follows you, whichever way your name is spelled or which device you use.",
       "Lists saved under two spellings of your name are combined into one — nothing is dropped.",
@@ -882,7 +887,7 @@
     if (person && person.photo) return '<span class="avatar has-img'+cls+'" title="'+esc(person.name||"")+'"><img src="'+esc(person.photo)+'" alt=""></span>';
     return '<span class="avatar'+cls+'" title="'+esc(person?person.name:"")+'">'+initials(person?person.name:"?")+'</span>'; }
   function avatarById(trip, id, cls) { return avatarOf((trip.people||[]).find(p=>p.id===id), cls); }
-  function avatarByName(trip, name, cls) { return avatarOf((trip.people||[]).find(p=>p.name===name) || { name: name }, cls); }
+  function avatarByName(trip, name, cls) { return avatarOf(personForName(trip, name) || { name: name }, cls); }
   // Downscale + crop an uploaded image to a small square JPEG data URL (kept small for the shared DB).
   function resizePhoto(file, cb) {
     if (!file || !/^image\//.test(file.type)) { cb(null); return; }
@@ -1498,7 +1503,7 @@
         '<div class="label" style="width:100%;margin-top:8px;display:flex;align-items:center;gap:7px;text-transform:none;letter-spacing:.02em">' +
           '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>' +
           (live ? "Live sync on — shared with your group" : "Local only (this device)") + '</div>' +
-        '<div class="label" style="width:100%;margin-top:4px;text-transform:none;letter-spacing:.02em">You: <b style="color:var(--ink)">'+esc(whoAmI()||"—")+'</b> · <button data-action="change-who" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;text-decoration:underline">change</button></div>' +
+        '<div class="label" style="width:100%;margin-top:4px;text-transform:none;letter-spacing:.02em">You: <b style="color:var(--ink)">'+esc(myName(activeTrip())||"—")+'</b> · <button data-action="change-who" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font:inherit;text-decoration:underline">change</button></div>' +
       '</div>' +
     '</aside>';
   }
@@ -1518,7 +1523,7 @@
     html += '<div class="section-title" style="margin-top:18px"><h3>You</h3></div>';
     html += '<div class="card card-pad" style="display:flex;align-items:center;gap:12px">' +
       avatarByName(trip, whoAmI()||"?") +
-      '<div style="flex:1;min-width:0"><div class="row-title">'+esc(whoAmI()||"Tap Change to set your name")+'</div>' +
+      '<div style="flex:1;min-width:0"><div class="row-title">'+esc(myName(trip)||"Tap Change to set your name")+'</div>' +
       '<div class="row-sub" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+(live?"var(--accent)":"var(--muted)")+'"></span>'+(live?"Live sync on — shared with your group":"Local only (this device)")+'</div></div>' +
       '<button class="btn sm" data-action="change-who">Change</button></div>';
     html += '<div class="section-title" style="margin-top:18px"><h3>Appearance</h3></div>';
@@ -2545,7 +2550,7 @@
 
     // ----- Personal (big collapsible) -----
     const pKey = "PACK:personal", pCollapsed = !!collapsedCats[pKey];
-    html += packSecHead(pKey, "Your personal list"+(who?" · "+esc(who):""), "Only you see & edit this", pCollapsed);
+    html += packSecHead(pKey, "Your personal list"+(who?" · "+esc(myName(trip)):""), "Only you see & edit this", pCollapsed);
     if (!pCollapsed) {
       if (!who) {
         html += '<div class="card card-pad empty">'+I.packing+'<p>Pick who you are to use your own personal packing list.</p><button class="btn primary" data-action="change-who" style="margin:0 auto">Choose your name</button></div>';
@@ -2688,7 +2693,7 @@
     html += '</div></div>';
     // carpool groupings
     const groups = {};
-    trip.people.forEach(p => { const g = trip.guests.find(x=>x.personId===p.id); const key = (g&&g.carpool)?g.carpool:null; if (key) (groups[key]=groups[key]||[]).push({p,g}); });
+    trip.people.forEach(p => { const g = trip.guests.find(x=>x.personId===p.id); const key = (g&&g.carpool)?carpoolName(trip, g.carpool):null; if (key) (groups[key]=groups[key]||[]).push({p,g}); });
     if (Object.keys(groups).length) {
       html += '<div class="day-head"><h4>Carpool groups</h4></div><div class="grid cols-2">';
       Object.keys(groups).forEach(k => {
@@ -2721,7 +2726,7 @@
       { key:"seats", label:"Spare seats (if driving)", type:"number", placeholder:"e.g. 3", hint:"How many others they can take." },
       { key:"departure", label:"Departure time", type:"text", placeholder:"e.g. Fri 3 PM" },
       { key:"meetPoint", label:"Leaving from / meeting point", type:"text", placeholder:"e.g. Yonge & Eglinton" },
-      { key:"carpool", label:"Carpool group", type:"datalist", options: (t) => Array.from(new Set((t.guests||[]).map(g=>g.carpool).filter(Boolean))), placeholder:"Pick an existing group or type a new one" },
+      { key:"carpool", label:"Carpool group", type:"datalist", options: (t) => Array.from(new Set((t.guests||[]).map(g=>g.carpool && carpoolName(t, g.carpool)).filter(Boolean))), placeholder:"Pick an existing group or type a new one" },
     ];
   }
 
@@ -3478,6 +3483,12 @@
   function whoAmI() { try { return localStorage.getItem("bc.who") || ""; } catch (e) { return ""; } }
   function setWho(n) { try { localStorage.setItem("bc.who", n); } catch (e) {} }
   function myPersonId(trip) { const p = personForName(trip, whoAmI()); return p ? p.id : ""; }
+  // The trip's own spelling of a name ("Eric" → "Eric Cheung" on a trip that uses full names);
+  // display-only — stored names are never rewritten.
+  function canonName(trip, name) { const p = personForName(trip, name); return p ? p.name : (String(name || "").trim()); }
+  function myName(trip) { return canonName(trip, whoAmI()); }
+  // Carpool groups are free text ("Joyce Rav4", "Eric's Van") — only a bare first name is treated as a person.
+  function carpoolName(trip, g) { const v = String(g || "").trim(); return /\s/.test(v) ? v : canonName(trip, v); }
   function normName(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
   // Match a typed name to one of the trip's people: exact name first, then a unique first-name
   // match ("Fei" ↔ "Fei Choi"), so the same person is recognised whichever spelling a device uses.
@@ -3499,9 +3510,10 @@
     identityPrompted = true;
     const people = (activeTrip().people || []);
     const cur = whoAmI();
+    const curP = personForName(activeTrip(), cur);
     const overlay = document.getElementById("overlay");
     const circles = people.map(p => '<button type="button" class="idpick" data-action="pick-who" data-name="'+esc(p.name)+'">' +
-      (p.photo ? '<span class="avatar idpick-av has-img'+(cur === p.name ? " sel" : "")+'"><img src="'+esc(p.photo)+'" alt=""></span>' : '<span class="avatar idpick-av'+(cur === p.name ? " sel" : "")+'">'+initials(p.name)+'</span>') +
+      (p.photo ? '<span class="avatar idpick-av has-img'+((curP ? curP.id === p.id : cur === p.name) ? " sel" : "")+'"><img src="'+esc(p.photo)+'" alt=""></span>' : '<span class="avatar idpick-av'+((curP ? curP.id === p.id : cur === p.name) ? " sel" : "")+'">'+initials(p.name)+'</span>') +
       '<span class="idpick-name">'+esc(p.name)+'</span></button>').join("");
     overlay.innerHTML = '<div class="modal" role="dialog" aria-modal="true" style="max-width:440px">' +
       '<div class="modal-head"><h3>Who are you?</h3><button class="icon-btn" data-close>'+I.x+'</button></div>' +
@@ -3521,7 +3533,7 @@
     if (!text) return;
     if (window.BCsync && window.BCsync.ready && window.BCsync.logActivity) {
       const t = activeTrip();
-      try { window.BCsync.logActivity({ who: whoAmI() || "Someone", text: text, ts: Date.now(), trip: t ? t.name : "", tripId: t ? t.id : "" }); } catch (e) {}
+      try { window.BCsync.logActivity({ who: (t ? myName(t) : whoAmI()) || "Someone", text: text, ts: Date.now(), trip: t ? t.name : "", tripId: t ? t.id : "" }); } catch (e) {}
     }
   }
   let activityCache = []; let activityWatching = false;
@@ -3589,7 +3601,7 @@
     const people = trip.people || [];
     const editEntries = entries.filter(a => (a.text || "") !== "joined the trip");
     const counts = {};
-    editEntries.forEach(a => { const w = (a.who || "").trim() || "Someone"; counts[w] = (counts[w] || 0) + 1; });
+    editEntries.forEach(a => { const w = canonName(trip, a.who) || "Someone"; counts[w] = (counts[w] || 0) + 1; });
     const rows = Object.keys(counts).map(w => ({ who: w, n: counts[w] })).sort((a, b) => b.n - a.n || a.who.localeCompare(b.who));
     const total = editEntries.length;
     const zero = people.filter(p => !counts[p.name]);
@@ -3617,7 +3629,7 @@
     html += '<div class="card"><div class="list card-pad" style="padding-top:4px;padding-bottom:4px">';
     entries.forEach(a => {
       html += '<div class="row-item">'+avatarByName(trip, a.who||"?") +
-        '<div class="row-main"><div class="row-title" style="font-weight:400"><b>'+esc(a.who||"Someone")+'</b> '+esc(a.text||"")+'</div>' +
+        '<div class="row-main"><div class="row-title" style="font-weight:400"><b>'+esc(canonName(trip, a.who)||"Someone")+'</b> '+esc(a.text||"")+'</div>' +
         '<div class="row-sub">'+esc(fmtWhen(a.ts))+'</div></div></div>';
     });
     html += '</div></div>';
